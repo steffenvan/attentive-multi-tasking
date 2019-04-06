@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import collections
 import os.path
+import atari_wrappers
 
 import numpy as np
 import tensorflow as tf
@@ -63,6 +64,27 @@ DEFAULT_ACTION_SET = (
 )
 
 
+# ACTION_SET = {
+#     0: "NOOP",
+#     1: "FIRE",
+#     2: "UP",
+#     3: "RIGHT",
+#     4: "LEFT",
+#     5: "DOWN",
+#     6: "UPRIGHT",
+#     7: "UPLEFT",
+#     8: "DOWNRIGHT",
+#     9: "DOWNLEFT",
+#     10: "UPFIRE",
+#     11: "RIGHTFIRE",
+#     12: "LEFTFIRE",
+#     13: "DOWNFIRE",
+#     14: "UPRIGHTFIRE",
+#     15: "UPLEFTFIRE",
+#     16: "DOWNRIGHTFIRE",
+#     17: "DOWNLEFTFIRE",
+# }
+
 class PyProcessDmLab(object):
   """DeepMind Lab wrapper for PyProcess."""
 
@@ -72,7 +94,10 @@ class PyProcessDmLab(object):
     self._random_state = np.random.RandomState(seed=seed)
     if runfiles_path:
       deepmind_lab.set_runfiles_path(runfiles_path)
+      # print("printing deepmind lab path: ", deepmind_lab.set_runfiles_path(runfiles_path))
     config = {k: str(v) for k, v in config.iteritems()}
+    # print("This is config: ", config)
+    # print("config path: ", config)
     self._observation_spec = ['RGB_INTERLEAVED', 'INSTR']
     self._env = deepmind_lab.Lab(
         level=level,
@@ -86,15 +111,25 @@ class PyProcessDmLab(object):
 
   def _observation(self):
     d = self._env.observations()
-    return [d[k] for k in self._observation_spec]
+    # print(d)
+    obs_list = [d[k] for k in self._observation_spec]
+    # print("Length of this: ", len(obs_list[0]))
+    return obs_list
 
   def initial(self):
     self._reset()
-    return self._observation()
+    obs = self._observation()
+    # print("Obs: ", obs)
+    # print("Initial obs: ", type(obs))
+    # print("Shape obs: ", np.array(obs).shape)
+    # print("Obs shape: ", np.array(obs)[0].shape)
+    # print("This is initial obs: ", obs[0])
+    # print("Length of obs: ", len(obs[0]))
+    return obs
 
   def step(self, action):
     reward = self._env.step(action, num_steps=self._num_action_repeats)
-    done = np.array(not self._env.is_running())
+    done = np.array(not self._env.is_running()) 
     if done:
       self._reset()
     observation = self._observation()
@@ -130,6 +165,51 @@ StepOutputInfo = collections.namedtuple('StepOutputInfo',
 StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
 
+# ATARI WRAPPER
+class PyProcessAtari(object):
+
+    def __init__(self, env_id, config, num_action_repeats, seed):
+
+      self.num_action_repeats = num_action_repeats
+      self._env = atari_wrappers.make_atari(env_id, max_episode_steps=num_action_repeats)
+      # self._env = atari_wrappers.wrap_deepmind(self._env)
+      
+    def initial(self):
+      # Initialize dictionary with arbritrary string as key and numpy arrays as values
+
+      initial_obs = self._env.reset()
+      print("This is initial obs: ", initial_obs)
+      print("Initial obs len: ", len(initial_obs))
+      print("This is intitial obs shape: ", initial_obs.shape)
+      # print("initial_obs: ", initial_obs)
+      # print("This is obs: ", dict_of_obs)
+      # Returns: 
+      return initial_obs, " "
+    
+    def step(self, action):
+      obs, reward, is_done, _ = self._env.step(action)
+      return reward, is_done, obs
+
+    @staticmethod
+    def _tensor_specs(method_name, unused_kwargs, constructor_kwargs):
+      """Returns a nest of `TensorSpec` with the method's output specification."""
+      # print("Consturctor kwargs: ", constructor_kwargs)
+      width = constructor_kwargs['config'].get('width', 84)
+      height = constructor_kwargs['config'].get('height', 84)
+
+      observation_spec = [
+          tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8),
+          tf.contrib.framework.TensorSpec([], tf.string),
+      ]
+
+      if method_name == 'initial':
+        return observation_spec
+      elif method_name == 'step':
+        return (
+            tf.contrib.framework.TensorSpec([], tf.float32),
+            tf.contrib.framework.TensorSpec([], tf.bool),
+            observation_spec,
+        )
 
 class FlowEnvironment(object):
   """An environment that returns a new state for every modifying method.
@@ -165,6 +245,7 @@ class FlowEnvironment(object):
       initial_reward = tf.constant(0.)
       initial_info = StepOutputInfo(tf.constant(0.), tf.constant(0))
       initial_done = tf.constant(True)
+      # print("Herp")
       initial_observation = self._env.initial()
 
       initial_output = StepOutput(
@@ -179,6 +260,11 @@ class FlowEnvironment(object):
         initial_flow = tf.constant(0, dtype=tf.int64)
       initial_state = (initial_flow, initial_info)
       return initial_output, initial_state
+
+  def render(self):
+    self._env.render()
+    # print("This is environment: ", self._env)
+
 
   def step(self, action, state):
     """Takes a step in the environment.
@@ -216,3 +302,6 @@ class FlowEnvironment(object):
 
       output = StepOutput(reward, new_info, done, observation)
       return output, new_state
+
+# env = atari_wrappers.FireResetEnv(self, env)
+
