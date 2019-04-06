@@ -166,6 +166,7 @@ StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
 
 # ATARI WRAPPER
+# TODO: Still need to modify this to be follow the same setup as the paper. 
 class PyProcessAtari(object):
 
     def __init__(self, env_id, config, num_action_repeats, seed):
@@ -175,15 +176,13 @@ class PyProcessAtari(object):
       # self._env = atari_wrappers.wrap_deepmind(self._env)
       
     def initial(self):
-      # Initialize dictionary with arbritrary string as key and numpy arrays as values
 
       initial_obs = self._env.reset()
-      print("This is initial obs: ", initial_obs)
-      print("Initial obs len: ", len(initial_obs))
-      print("This is intitial obs shape: ", initial_obs.shape)
-      # print("initial_obs: ", initial_obs)
-      # print("This is obs: ", dict_of_obs)
-      # Returns: 
+
+      # Uncomment to see the output. Should be a list of observations. 
+      # print("This is initial obs: ", initial_obs)
+      # TODO: This is awefully hard-coded. Removing the second argument in return, gives an error, because 
+      # it expects a tuple, where the second argument must be an empty string? 
       return initial_obs, " "
     
     def step(self, action):
@@ -261,8 +260,6 @@ class FlowEnvironment(object):
       initial_state = (initial_flow, initial_info)
       return initial_output, initial_state
 
-  def render(self):
-    self._env.render()
     # print("This is environment: ", self._env)
 
 
@@ -302,6 +299,4 @@ class FlowEnvironment(object):
 
       output = StepOutput(reward, new_info, done, observation)
       return output, new_state
-
-# env = atari_wrappers.FireResetEnv(self, env)
 
