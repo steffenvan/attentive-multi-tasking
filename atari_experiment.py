@@ -68,8 +68,8 @@ flags.DEFINE_float('epsilon', .1, 'RMSProp epsilon.')
 
 # Atari environments
 
-flags.DEFINE_integer('width', 84, 'Width of observation')
-flags.DEFINE_integer('height', 84, 'Height of observation')
+flags.DEFINE_integer('width', 210, 'Width of observation')
+flags.DEFINE_integer('height', 160, 'Height of observation')
 
 # Structure to be sent from actors to learner.
 ActorOutput = collections.namedtuple(
@@ -431,8 +431,8 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
 def create_atari_environment(env_id, seed, is_test=False):
 #   print("Before env proxy")
   config = {
-      'width': 84,
-      'heigh': 84,
+      'width': 210,
+      'height': 160,
       'level': env_id,
       'logLevel': 'warn'
   }
@@ -503,6 +503,7 @@ def train(action_set, level_names):
     # TODO: not a good idea - this is just hard-coded to be 17. Find a way to get the right action space size.
     # print("After creating environment")
     agent = Agent(len(action_set))
+    # print("Stil here")
     structure = build_actor(agent, env, level_names[0], action_set)
     # env = create_dm30_environment(level_names[0], seed=1)
     # structure = build_actor(agent, env, level_names[0], action_set)
@@ -592,7 +593,6 @@ def train(action_set, level_names):
             [t.dtype for t in flattened_output],
             [t.shape for t in flattened_output])
         stage_op = area.put(flattened_output)
-
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
         # Unroll agent on sequence, create losses and update ops.
@@ -617,6 +617,7 @@ def train(action_set, level_names):
         # Logging.
         # TODO: Modify this to be able to handle atari
         # env_returns = {env_id: [] for env_id in env_ids}
+        print("world")
         level_returns = {level_name: [] for level_name in level_names}
         summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
 

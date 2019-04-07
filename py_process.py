@@ -71,37 +71,50 @@ class _TFProxy(object):
       kwargs = dict(
           zip(function_utils.fn_args(getattr(self._type, name))[1:], args))
       specs = self._type._tensor_specs(name, kwargs, self._constructor_kwargs)
+      # print("name is: ", name)
+      # print("kwargs are: ", kwargs)
+      # print("specs are: ", specs)
 
       if specs is None:
         raise ValueError(
             'No tensor specifications were provided for: %s' % name)
 
       flat_dtypes = nest.flatten(nest.map_structure(lambda s: s.dtype, specs))
+      # print("Flat dtypes: ", flat_dtypes)
       flat_shapes = nest.flatten(nest.map_structure(lambda s: s.shape, specs))
-
       def py_call(*args):
         try:
           self._out.send(args)
           result = self._out.recv()
+          # print("Result: ", result)
+          # print("This is what is given to initial(): ", result)
           if isinstance(result, Exception):
+            # print("Result: ", result)
             raise result
           if result is not None:
+            # print("Result2: ", result)
             return result
         except Exception as e:
           if isinstance(e, IOError):
             raise StopIteration()  # Clean exit.
           else:
             raise
-
+      # print("name is: ", name)
+      # print("args are: ", tuple(args))
+      # print("Pycall is: ", py_call)
+      # print("Before result in pyprocess")
       result = tf.py_func(py_call, (name,) + tuple(args), flat_dtypes,
                           name=name)
+      # print("after result in pyprocess")
 
       if isinstance(result, tf.Operation):
         return result
 
       for t, shape in zip(result, flat_shapes):
         t.set_shape(shape)
-      return nest.pack_sequence_as(specs, result)
+      retval = nest.pack_sequence_as(specs, result)
+      return retval
+      # print("call is: ", call)
     return call
 
   def _start(self):
@@ -111,6 +124,7 @@ class _TFProxy(object):
         args=(self._type, self._constructor_kwargs, in_))
     self._process.start()
     result = self._out.recv()
+    # print("result: ", result)
 
     if isinstance(result, Exception):
       raise result
