@@ -145,8 +145,8 @@ class PyProcessDmLab(object):
     """Returns a nest of `TensorSpec` with the method's output specification."""
     width = constructor_kwargs['config'].get('width', 320)
     height = constructor_kwargs['config'].get('height', 240)
-    print("width: ", width)
-    print("height: ", height)
+    print("(environments.py) width: ", width)
+    print("(environments.py) height: ", height)
 
     observation_spec = [
         tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8),
@@ -186,7 +186,7 @@ class PyProcessAtari(object):
       # print("This is initial obs: ", initial_obs)
       # TODO: This is awefully hard-coded. Removing the second argument in return, gives an error, because 
       # it expects a tuple, where the second argument must be an empty string? 
-      print(initial_obs.shape)
+      print("(environments.py) initial_shape_atari: ", initial_obs.shape)
       return initial_obs, " "
     
     def step(self, action):
@@ -199,8 +199,8 @@ class PyProcessAtari(object):
       # print("Consturctor kwargs: ", constructor_kwargs)
       width = constructor_kwargs['config'].get('width', 210)
       height = constructor_kwargs['config'].get('height', 160)
-      print("width: ", width)
-      print("height: ", height)
+      # print("(environments.py) width: ", width)
+      # print("(environments.py) height: ", height)
 
       observation_spec = [
           tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8),

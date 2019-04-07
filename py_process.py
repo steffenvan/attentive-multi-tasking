@@ -83,13 +83,16 @@ class _TFProxy(object):
       # print("Flat dtypes: ", flat_dtypes)
       flat_shapes = nest.flatten(nest.map_structure(lambda s: s.shape, specs))
       def py_call(*args):
+        print("(PyProcess.py) args are: ", args)
         try:
           self._out.send(args)
           result = self._out.recv()
+          print("(PyProcess.py) result is: ", result)
           # print("Result: ", result)
           # print("This is what is given to initial(): ", result)
           if isinstance(result, Exception):
             # print("Result: ", result)
+            print("(PyProcess.py) Exception is: ", result)
             raise result
           if result is not None:
             # print("Result2: ", result)
