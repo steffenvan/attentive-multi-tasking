@@ -275,7 +275,7 @@ def build_actor(agent, env, level_name, action_set):
     # Convert action index to the native action.
     action = agent_output[0][0]
     # action = tf.Print(agent_output[0][0], [agent_output[0][0]], "Action is: ")
-    raw_action = tf.gather(action_set, action)
+    raw_action = action
     # raw_action = tf.Print(tf.shape(raw_action), [tf.shape(raw_action)], "Raw action shape is: ")
 
 
@@ -708,6 +708,7 @@ def main(_):
                      "DOWNLEFT", "UPFIRE", "RIGHTFIRE", "LEFTFIRE", "DOWNFIRE", "UPRIGHTFIRE", "UPLEFTFIRE",
                      "DOWNRIGHTFIRE", "DOWNLEFTFIRE")
     pong_action_values = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+    # pong_action_values = (0, 1, 2, 3, 4, 5)
     # action_set = environments.DEFAULT_ACTION_SET
     # aciont_set = ACTION_SET_
 #   if FLAGS.level_name == 'dmlab30' and FLAGS.mode == 'train':
@@ -719,7 +720,7 @@ def main(_):
 # ]
     # atari_games = ["CartPole-v1", "MountainCar-v0", ""]
     train(pong_action_values, ATARI_MAPPING.keys())
-    print("Action set: ", action_set)
+    # print("Action set: ", action_set)
 #   if FLAGS.mode == 'train':
     # train(action_set, level_names)
 #   else:
