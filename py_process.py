@@ -84,6 +84,7 @@ class _TFProxy(object):
       flat_shapes = nest.flatten(nest.map_structure(lambda s: s.shape, specs))
       def py_call(*args):
         print("(PyProcess.py) args are: ", args)
+        print("(PyProcess.py) type of args are: ", type(args))
         try:
           self._out.send(args)
           result = self._out.recv()
