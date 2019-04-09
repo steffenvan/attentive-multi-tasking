@@ -114,7 +114,7 @@ class PyProcessDmLab(object):
     # print(d)
     obs_list = [d[k] for k in self._observation_spec] 
      # print("Length of this: ", len(obs_list[0]))
-    print("obs lsit: ", obs_list[0].shape)
+    # print("obs lsit: ", obs_list[0].shape)
     return obs_list
 
   def initial(self):
@@ -176,22 +176,34 @@ class PyProcessAtari(object):
 
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id, max_episode_steps=num_action_repeats)
+      self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
+      # print(self._env.render())
       # self._env = atari_wrappers.wrap_deepmind(self._env)
       
     def initial(self):
 
       initial_obs = self._env.reset()
-
+      # print
+      print("(environments.py) initial obs: ", initial_obs[1])
       # Uncomment to see the output. Should be a list of observations. 
       # print("This is initial obs: ", initial_obs)
       # TODO: This is awefully hard-coded. Removing the second argument in return, gives an error, because 
       # it expects a tuple, where the second argument must be an empty string? 
-      print("(environments.py) initial_shape_atari: ", initial_obs.shape)
+      # print("(environments.py) initial_shape_atari: ", initial_obs.shape)
       return initial_obs, " "
     
+    def render(self):
+      self._env.render()
+
     def step(self, action):
-      obs, reward, is_done, _ = self._env.step(action)
-      return reward, is_done, obs
+      obs, reward, is_done, info = self._env.step(action)
+      # print("(environments.py) Type of obs: ", type(obs))
+      # print("(environments.py) Type of info: ", type(info))
+      # print("(environments.py) reward: {} type of reward: {} ".format(reward, type(reward)))
+      # reward = reward.astype(float)
+      # print ("(environments.py) Info is: ", info)
+      reward = np.float32(reward)
+      return reward, is_done, obs, str(info)
 
     @staticmethod
     def _tensor_specs(method_name, unused_kwargs, constructor_kwargs):
@@ -208,6 +220,7 @@ class PyProcessAtari(object):
       ]
 
       if method_name == 'initial':
+        print("(environments.py) obs_specs are: ", observation_spec)
         return observation_spec
       elif method_name == 'step':
         return (
@@ -215,6 +228,11 @@ class PyProcessAtari(object):
             tf.contrib.framework.TensorSpec([], tf.bool),
             observation_spec,
         )
+      elif method_name == 'render':
+        return observation_spec
+
+def is_atari(env_id):
+  return "-v0" in env_id
 
 class FlowEnvironment(object):
   """An environment that returns a new state for every modifying method.
@@ -236,6 +254,9 @@ class FlowEnvironment(object):
         episode.
     """
     self._env = env
+
+  def render(self):
+    self._env.render()
 
   def initial(self):
     """Returns the initial output and initial state.
