@@ -80,23 +80,26 @@ class _TFProxy(object):
             'No tensor specifications were provided for: %s' % name)
 
       flat_dtypes = nest.flatten(nest.map_structure(lambda s: s.dtype, specs))
-      # print("Flat dtypes: ", flat_dtypes)
+      print("(py_process.py) tensor specs: ", specs)
+      # print()
+      print("(py_process.py) Flat dtypes: ", flat_dtypes)
       flat_shapes = nest.flatten(nest.map_structure(lambda s: s.shape, specs))
       def py_call(*args):
-        print("(PyProcess.py) args are: ", args)
-        print("(PyProcess.py) type of args are: ", type(args))
+        # print("(PyProcess.py) args are: ", args)
+        # print("(PyProcess.py) first args are: ", args[0])
+        # print("(PyProcess.py) type of args are: ", type(args))
         try:
           self._out.send(args)
           result = self._out.recv()
-          print("(PyProcess.py) result is: ", result)
+          # print("(PyProcess.py) result is: ", result)
           # print("Result: ", result)
           # print("This is what is given to initial(): ", result)
           if isinstance(result, Exception):
             # print("Result: ", result)
-            print("(PyProcess.py) Exception is: ", result)
+            # print("(PyProcess.py) Exception is: ", result)
             raise result
           if result is not None:
-            # print("Result2: ", result)
+            # print("(PyProcess.py) good result: ", type(result[1]))
             return result
         except Exception as e:
           if isinstance(e, IOError):
@@ -105,13 +108,17 @@ class _TFProxy(object):
             raise
       # print("name is: ", name)
       # print("args are: ", tuple(args))
-      # print("Pycall is: ", py_call)
+      # print("(PyProcess.py) Pycall is: ", type(py_call))
       # print("Before result in pyprocess")
+
+      # print("(PyProcess.py) 2nd argument: ", (name,) + tuple(args))
+      
       result = tf.py_func(py_call, (name,) + tuple(args), flat_dtypes,
                           name=name)
       # print("after result in pyprocess")
-
+      # print("(PyProcess.py) operation result is: ", result)
       if isinstance(result, tf.Operation):
+        # print("(PyProcess.py) operation result is: ", result)
         return result
 
       for t, shape in zip(result, flat_shapes):
