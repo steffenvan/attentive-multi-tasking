@@ -48,7 +48,7 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
 flags.DEFINE_integer('total_environment_frames', int(1e9),
                      'Total environment frames to train for.')
 flags.DEFINE_integer('num_actors', 4, 'Number of actors.')
-flags.DEFINE_integer('batch_size', 32, 'Batch size for training.')
+flags.DEFINE_integer('batch_size', 2, 'Batch size for training.')
 flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
@@ -57,19 +57,19 @@ flags.DEFINE_integer('seed', 1, 'Random seed.')
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
 flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
 flags.DEFINE_float('discounting', .99, 'Discounting factor.')
-flags.DEFINE_enum('reward_clipping', 'abs_one', ['abs_one', 'soft_asymmetric'],
-                  'Reward clipping.')
+# flags.DEFINE_enum('reward_clipping', 'abs_one', ['abs_one', 'soft_asymmetric'],
+#                   'Reward clipping.')
 
 # Optimizer settings.
 flags.DEFINE_float('learning_rate', 0.0006, 'Learning rate.')
 flags.DEFINE_float('decay', .99, 'RMSProp optimizer decay.')
 flags.DEFINE_float('momentum', 0., 'RMSProp momentum.')
-flags.DEFINE_float('epsilon', .1, 'RMSProp epsilon.')
+flags.DEFINE_float('epsilon', .01, 'RMSProp epsilon.')
 
 # Atari environments
 
-flags.DEFINE_integer('width', 210, 'Width of observation')
-flags.DEFINE_integer('height', 160, 'Height of observation')
+flags.DEFINE_integer('width', 84, 'Width of observation')
+flags.DEFINE_integer('height', 84, 'Height of observation')
 
 # Structure to be sent from actors to learner.
 ActorOutput = collections.namedtuple(
@@ -274,8 +274,10 @@ def build_actor(agent, env, level_name, action_set):
 
     # Convert action index to the native action.
     action = agent_output[0][0]
+    # Changed from 
     # action = tf.Print(agent_output[0][0], [agent_output[0][0]], "Action is: ")
     raw_action = action
+
     # raw_action = tf.Print(tf.shape(raw_action), [tf.shape(raw_action)], "Raw action shape is: ")
 
 
@@ -374,12 +376,12 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
       lambda t: t[1:], env_outputs)
   learner_outputs = nest.map_structure(lambda t: t[:-1], learner_outputs)
 
-  if FLAGS.reward_clipping == 'abs_one':
-    clipped_rewards = tf.clip_by_value(rewards, -1, 1)
-  elif FLAGS.reward_clipping == 'soft_asymmetric':
-    squeezed = tf.tanh(rewards / 5.0)
-    # Negative rewards are given less weight than positive rewards.
-    clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
+  # if FLAGS.reward_clipping == 'abs_one':
+  #   clipped_rewards = tf.clip_by_value(rewards, -1, 1)
+  # elif FLAGS.reward_clipping == 'soft_asymmetric':
+  #   squeezed = tf.tanh(rewards / 5.0)
+  #   # Negative rewards are given less weight than positive rewards.
+  #   clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
 
   discounts = tf.to_float(~done) * FLAGS.discounting
 
@@ -392,7 +394,7 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
         target_policy_logits=learner_outputs.policy_logits,
         actions=agent_outputs.action,
         discounts=discounts,
-        rewards=clipped_rewards,
+        rewards=rewards,
         values=learner_outputs.baseline,
         bootstrap_value=bootstrap_value)
 
@@ -431,8 +433,8 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
 def create_atari_environment(env_id, seed, is_test=False):
 #   print("Before env proxy")
   config = {
-      'width': 210,
-      'height': 160,
+      'width': 84,
+      'height': 84,
       'level': env_id,
       'logLevel': 'warn'
   }
@@ -499,12 +501,11 @@ def train(action_set, level_names):
     # TODO: initialize Atari environment
     # print("Created atari envrionment")
     env = create_atari_environment(level_names[0], seed=1)
-    # env.render()
-    # TODO: not a good idea - this is just hard-coded to be 17. Find a way to get the right action space size.
     # print("After creating environment")
     agent = Agent(len(action_set))
     # print("Stil here")
     structure = build_actor(agent, env, level_names[0], action_set)
+    # print("Structure :", structure)
     # env = create_dm30_environment(level_names[0], seed=1)
     # structure = build_actor(agent, env, level_names[0], action_set)
     flattened_structure = nest.flatten(structure)
@@ -533,6 +534,7 @@ def train(action_set, level_names):
         old_build = agent._build
         @dynamic_batching.batch_fn
         def build(*args):
+          # print("experiment.py: args: ", args)
           with tf.device('/gpu'):
             return old_build(*args)
         tf.logging.info('Using dynamic batching.')
@@ -551,6 +553,7 @@ def train(action_set, level_names):
         # print(env.initial())
         # TODO: Modify to atari environment
         actor_output = build_actor(agent, env, level_name, action_set)
+        env.render()
         
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
@@ -617,7 +620,6 @@ def train(action_set, level_names):
         # Logging.
         # TODO: Modify this to be able to handle atari
         # env_returns = {env_id: [] for env_id in env_ids}
-        print("world")
         level_returns = {level_name: [] for level_name in level_names}
         summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
 
@@ -629,6 +631,7 @@ def train(action_set, level_names):
         num_env_frames_v = 0
         # TODO: Modify to Atari 
         while num_env_frames_v < FLAGS.total_environment_frames:
+          print("(atari_experiment.py) num_env_frames: ", num_env_frames_v)
           level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
               (data_from_actors.level_name,) + output + (stage_op,))
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
@@ -651,12 +654,20 @@ def train(action_set, level_names):
             # TODO: Modify to Atari
             # if FLAGS.level_name == 'dmlab30':
             level_returns[level_name].append(episode_return)
+            print("(atari_experiment.py) level_returns: ", level_returns)
 
           if min(map(len, level_returns.values())) >= 1:
             no_cap = dmlab30.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
+        
+            print("(atari_experiment) No cap: ", no_cap)
             cap_100 = dmlab30.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
+            with open("test.txt", "a+") as f:
+              f.write("num env frames: %d\n" % num_env_frames_v)
+              f.write("no cap: %f\n" % no_cap)
+              f.write("cap 100: %f\n" % cap_100)
+            print("(atari_experiment) cap 100: ", cap_100)
             summary = tf.summary.Summary()
             summary.value.add(
                 tag='dmlab30/training_no_cap', simple_value=no_cap)
@@ -677,37 +688,49 @@ def train(action_set, level_names):
 
 
 ATARI_MAPPING = collections.OrderedDict([
-    ('Pong-v0', 'Pong-v0')
+    # ('Pong-v0', 'Pong-v0'),
+    ('Breakout-v0', 'Breakout-v0'),
     # ('Breakout-v0', 'Breakout-v0')
 ])
 
+ATARI_GAMES_ACTIONS = collections.OrderedDict([('BeamRider-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')), 
+                                               ('Breakout-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT')), 
+                                               ('Pong-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')), 
+                                               ('Qbert-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')), 
+                                               ('Seaquest-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')), 
+                                               ('SpaceInvaders-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'))])
+
+
+
+# def get_action_space(env_id, index):
+#     for key in ATARI_MAPPING.keys():
+#       if "Beamrider" in key: 
+#         action_space = get_action_space(key, 0)
+#       elif "Breakout" in key:
+#         action_space = get_action_space(key, 1)
+#       elif "Pong" in key:
+#         action_space = get_action_space(key, 2)
+#       elif "Qbert" in key:
+#         action_space = get_action_space(key, 3)
+#       elif "Seaquest" in key:
+#         action_space = get_action_space(key, 4)
+#       elif "Space" in key: 
+#         action_space = get_action_space(key, 5)
+#   action_space = ATARI_GAMES_ACTIONS[env_id[index]]
+#   return action_space
+# print(ATARI_MAPPING.keys()[0])
+# print(get_action_space(ATARI_MAPPING.keys(), 0))
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
-    blah = {
-        0: "NOOP",
-        1: "FIRE",
-        2: "UP",
-        3: "RIGHT",
-        4: "LEFT",
-        5: "DOWN",
-        6: "UPRIGHT",
-        7: "UPLEFT",
-        8: "DOWNRIGHT",
-        9: "DOWNLEFT",
-        10: "UPFIRE",
-        11: "RIGHTFIRE",
-        12: "LEFTFIRE",
-        13: "DOWNFIRE",
-        14: "UPRIGHTFIRE",
-        15: "UPLEFTFIRE",
-        16: "DOWNRIGHTFIRE",
-        17: "DOWNLEFTFIRE",
-    }
-    action_set_values = ("NOOP", "FIRE", "UP", "RIGHT", "LEFT", "DOWN", "UPRIGHT", "UPLEFT", "DOWNRIGHT",
-                     "DOWNLEFT", "UPFIRE", "RIGHTFIRE", "LEFTFIRE", "DOWNFIRE", "UPRIGHTFIRE", "UPLEFTFIRE",
-                     "DOWNRIGHTFIRE", "DOWNLEFTFIRE")
+    beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
+    breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT')
     pong_action_values = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+    qbert_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')
+    seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
+                              'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
+    spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+
     # pong_action_values = (0, 1, 2, 3, 4, 5)
     # action_set = environments.DEFAULT_ACTION_SET
     # aciont_set = ACTION_SET_
@@ -716,15 +739,9 @@ def main(_):
 #   elif FLAGS.level_name == 'dmlab30' and FLAGS.mode == 'test':
 #     level_names = dmlab30.LEVEL_MAPPING.values()
 #   else:
-#     level_names = [FLAGS.level_name
-# ]
-    # atari_games = ["CartPole-v1", "MountainCar-v0", ""]
-    train(pong_action_values, ATARI_MAPPING.keys())
-    # print("Action set: ", action_set)
-#   if FLAGS.mode == 'train':
-    # train(action_set, level_names)
-#   else:
-#     test(action_set, level_names)
+#     level_names = [FLAGS.level_name]
+
+    train(breakout_action_values, ATARI_MAPPING.keys()) 
 
 def get_seed():
   global seed 
