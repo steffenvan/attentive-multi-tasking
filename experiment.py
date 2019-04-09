@@ -630,7 +630,7 @@ def train(action_set, level_names):
                                                             
             cap_100 = dmlab30.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
-            with open("test.txt", "a+") as f:
+            with open("normalized_scores.txt", "a+") as f:
               f.write("num env frames: %d\n" % num_env_frames_v)
               f.write("no cap: %f\n" % no_cap)
               f.write("cap 100: %f\n" % cap_100)
