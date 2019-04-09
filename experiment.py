@@ -620,13 +620,21 @@ def train(action_set, level_names):
 
             if FLAGS.level_name == 'dmlab30':
               level_returns[level_name].append(episode_return)
+              print("(experiment.py) level_returns: ", level_returns)
 
           if (FLAGS.level_name == 'dmlab30' and
               min(map(len, level_returns.values())) >= 1):
             no_cap = dmlab30.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
+            # print("(experiment) No cap: ", no_cap)
+                                                            
             cap_100 = dmlab30.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
+            with open("test.txt", "a+") as f:
+              f.write("num env frames: %d\n" % num_env_frames_v)
+              f.write("no cap: %f\n" % no_cap)
+              f.write("cap 100: %f\n" % cap_100)
+
             summary = tf.summary.Summary()
             summary.value.add(
                 tag='dmlab30/training_no_cap', simple_value=no_cap)
