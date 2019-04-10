@@ -156,7 +156,7 @@ class PyProcessAtari(object):
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id, max_episode_steps=num_action_repeats)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
-      
+      self.counter = 0
     def initial(self):
 
       initial_obs = self._env.reset()
@@ -167,6 +167,7 @@ class PyProcessAtari(object):
       # TODO: This is awefully hard-coded. Removing the second argument in return, gives an error, because 
       # it expects a tuple, where the second argument must be an empty string? 
       # print("(environments.py) initial_shape_atari: ", initial_obs.shape)
+      self.counter = 0
       return initial_obs, " "
     
     def render(self):
@@ -179,8 +180,14 @@ class PyProcessAtari(object):
       # print("(environments.py) reward: {} type of reward: {} ".format(reward, type(reward)))
       # reward = reward.astype(float)
       # print ("(environments.py) Info is: ", info)
+      self.counter += 1
       self._env.render()
       reward = np.float32(reward)
+      # done = np.array(not self._env.is_running()) 
+      # info["ale.lives"]
+      # print("(environments.py) counter: {} - done is:{}".format(self.counter, done))
+      # if 
+      # print("(environments.py info is: ", info["ale.lives"])
       return reward, is_done, obs, str(info)
 
     @staticmethod

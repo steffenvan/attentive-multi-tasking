@@ -552,7 +552,7 @@ def train(action_set, level_names):
         # print(env.initial())
         # TODO: Modify to atari environment
         actor_output = build_actor(agent, env, level_name, action_set)
-        print("(atari_experiment.py) environment type: ", env)
+        # print("(atari_experiment.py) environment type: ", env)
         
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
@@ -687,8 +687,8 @@ def train(action_set, level_names):
 
 
 ATARI_MAPPING = collections.OrderedDict([
-    # ('Pong-v0', 'Pong-v0'),
-    ('Breakout-v0', 'Breakout-v0'),
+    ('Pong-v0', 'Pong-v0'),
+    # ('Breakout-v0', 'Breakout-v0'),
     # ('Breakout-v0', 'Breakout-v0')
 ])
 
@@ -740,7 +740,7 @@ def main(_):
 #   else:
 #     level_names = [FLAGS.level_name]
 
-    train(breakout_action_values, ATARI_MAPPING.keys()) 
+    train(pong_action_values, ATARI_MAPPING.keys()) 
 
 def get_seed():
   global seed 
