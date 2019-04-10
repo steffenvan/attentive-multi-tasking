@@ -244,22 +244,22 @@ def compute_human_normalized_score(level_returns, per_level_cap):
 
   def human_normalized_score(level_name, returns):
     score = np.mean(returns)
-    print("(dmlab30.py) score is: ", score)
+    # print("(dmlab30.py) score is: ", score)
     # Checks if we are in atari
     if "v0" in level_name:
       human = HUMAN_SCORES_ATARI[level_name]
-      print("(dmlab30.py) human score: ", human)
+      # print("(dmlab30.py) human score: ", human)
       random = RANDOM_SCORES_ATARI[level_name]
-      print("(dmlab30.py) random score: ", random)
+      # print("(dmlab30.py) random score: ", random)
     else:
       human = HUMAN_SCORES[level_name]
       random = RANDOM_SCORES[level_name]
     human_normalized_score = (score - random) / (human - random) * 100
-    print("(dmlab30.py) normalized score: ", human_normalized_score)
+    # print("(dmlab30.py) normalized score: ", human_normalized_score)
     if per_level_cap is not None:
       human_normalized_score = min(human_normalized_score, per_level_cap)
-      print("(dmlab30.py) normalized score per level cap: ", human_normalized_score)
+      # print("(dmlab30.py) normalized score per level cap: ", human_normalized_score)
     return human_normalized_score
   new_score = [human_normalized_score(k, v) for k, v in new_level_returns.items()]
-  print("(dmlab30.py) new score: ", new_score)
+  # print("(dmlab30.py) new score: ", new_score)
   return np.mean(new_score)
