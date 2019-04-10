@@ -80,9 +80,9 @@ class _TFProxy(object):
             'No tensor specifications were provided for: %s' % name)
 
       flat_dtypes = nest.flatten(nest.map_structure(lambda s: s.dtype, specs))
-      print("(py_process.py) tensor specs: ", specs)
+      # print("(py_process.py) tensor specs: ", specs)
       # print()
-      print("(py_process.py) Flat dtypes: ", flat_dtypes)
+      # print("(py_process.py) Flat dtypes: ", flat_dtypes)
       flat_shapes = nest.flatten(nest.map_structure(lambda s: s.shape, specs))
       def py_call(*args):
         # print("(PyProcess.py) args are: ", args)
