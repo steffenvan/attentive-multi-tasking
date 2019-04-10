@@ -321,7 +321,6 @@ def build_actor(agent, env, level_name, action_set):
     output = ActorOutput(
         level_name=level_name, agent_state=first_agent_state,
         env_outputs=full_env_outputs, agent_outputs=full_agent_outputs)
-
     # No backpropagation should be done here.
     return nest.map_structure(tf.stop_gradient, output)
 
@@ -553,7 +552,7 @@ def train(action_set, level_names):
         # print(env.initial())
         # TODO: Modify to atari environment
         actor_output = build_actor(agent, env, level_name, action_set)
-        env.render()
+        print("(atari_experiment.py) environment type: ", env)
         
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
@@ -654,7 +653,7 @@ def train(action_set, level_names):
             # TODO: Modify to Atari
             # if FLAGS.level_name == 'dmlab30':
             level_returns[level_name].append(episode_return)
-            print("(atari_experiment.py) level_returns: ", level_returns)
+            # print("(atari_experiment.py) level_returns: ", level_returns)
 
           if min(map(len, level_returns.values())) >= 1:
             no_cap = dmlab30.compute_human_normalized_score(level_returns,
