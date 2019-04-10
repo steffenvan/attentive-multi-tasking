@@ -64,27 +64,6 @@ DEFAULT_ACTION_SET = (
 )
 
 
-# ACTION_SET = {
-#     0: "NOOP",
-#     1: "FIRE",
-#     2: "UP",
-#     3: "RIGHT",
-#     4: "LEFT",
-#     5: "DOWN",
-#     6: "UPRIGHT",
-#     7: "UPLEFT",
-#     8: "DOWNRIGHT",
-#     9: "DOWNLEFT",
-#     10: "UPFIRE",
-#     11: "RIGHTFIRE",
-#     12: "LEFTFIRE",
-#     13: "DOWNFIRE",
-#     14: "UPRIGHTFIRE",
-#     15: "UPLEFTFIRE",
-#     16: "DOWNRIGHTFIRE",
-#     17: "DOWNLEFTFIRE",
-# }
-
 class PyProcessDmLab(object):
   """DeepMind Lab wrapper for PyProcess."""
 
@@ -145,8 +124,8 @@ class PyProcessDmLab(object):
     """Returns a nest of `TensorSpec` with the method's output specification."""
     width = constructor_kwargs['config'].get('width', 320)
     height = constructor_kwargs['config'].get('height', 240)
-    print("(environments.py) width: ", width)
-    print("(environments.py) height: ", height)
+    # print("(environments.py) width: ", width)
+    # print("(environments.py) height: ", height)
 
     observation_spec = [
         tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8),
@@ -177,14 +156,12 @@ class PyProcessAtari(object):
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id, max_episode_steps=num_action_repeats)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
-      # print(self._env.render())
-      # self._env = atari_wrappers.wrap_deepmind(self._env)
       
     def initial(self):
 
       initial_obs = self._env.reset()
       # print
-      print("(environments.py) initial obs: ", initial_obs[1])
+      # print("(environments.py) initial obs: ", initial_obs[1])
       # Uncomment to see the output. Should be a list of observations. 
       # print("This is initial obs: ", initial_obs)
       # TODO: This is awefully hard-coded. Removing the second argument in return, gives an error, because 
@@ -193,7 +170,7 @@ class PyProcessAtari(object):
       return initial_obs, " "
     
     def render(self):
-      self._env.render()
+      return self._env.render()
 
     def step(self, action):
       obs, reward, is_done, info = self._env.step(action)
@@ -202,6 +179,7 @@ class PyProcessAtari(object):
       # print("(environments.py) reward: {} type of reward: {} ".format(reward, type(reward)))
       # reward = reward.astype(float)
       # print ("(environments.py) Info is: ", info)
+      self._env.render()
       reward = np.float32(reward)
       return reward, is_done, obs, str(info)
 
@@ -220,7 +198,7 @@ class PyProcessAtari(object):
       ]
 
       if method_name == 'initial':
-        print("(environments.py) obs_specs are: ", observation_spec)
+        # print("(environments.py) obs_specs are: ", observation_spec)
         return observation_spec
       elif method_name == 'step':
         return (
@@ -230,9 +208,6 @@ class PyProcessAtari(object):
         )
       elif method_name == 'render':
         return observation_spec
-
-def is_atari(env_id):
-  return "-v0" in env_id
 
 class FlowEnvironment(object):
   """An environment that returns a new state for every modifying method.
@@ -255,8 +230,6 @@ class FlowEnvironment(object):
     """
     self._env = env
 
-  def render(self):
-    self._env.render()
 
   def initial(self):
     """Returns the initial output and initial state.
@@ -325,5 +298,6 @@ class FlowEnvironment(object):
           new_info)
 
       output = StepOutput(reward, new_info, done, observation)
+      # print("(environments.py) step reward: ", reward)
       return output, new_state
 
