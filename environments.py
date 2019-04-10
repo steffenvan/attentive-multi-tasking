@@ -110,6 +110,8 @@ class PyProcessDmLab(object):
   def step(self, action):
     reward = self._env.step(action, num_steps=self._num_action_repeats)
     done = np.array(not self._env.is_running()) 
+    print("BEfore numpy array: ", self._env.is_running())
+    # print("Done in dmlab environment): ", done)
     if done:
       self._reset()
     observation = self._observation()
@@ -154,7 +156,7 @@ class PyProcessAtari(object):
     def __init__(self, env_id, config, num_action_repeats, seed):
 
       self.num_action_repeats = num_action_repeats
-      self._env = atari_wrappers.make_atari(env_id, max_episode_steps=num_action_repeats)
+      self._env = atari_wrappers.make_atari(env_id)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
       self.counter = 0
     def initial(self):
@@ -182,12 +184,16 @@ class PyProcessAtari(object):
       # print ("(environments.py) Info is: ", info)
       self.counter += 1
       self._env.render()
+      done = np.array(is_done)
       reward = np.float32(reward)
-      # done = np.array(not self._env.is_running()) 
+      # print("is done info: ", done)
+      if done:
+        self._env.reset() 
       # info["ale.lives"]
       # print("(environments.py) counter: {} - done is:{}".format(self.counter, done))
       # if 
       # print("(environments.py info is: ", info["ale.lives"])
+
       return reward, is_done, obs, str(info)
 
     @staticmethod
