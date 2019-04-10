@@ -424,7 +424,8 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
   tf.summary.scalar('learning_rate', learning_rate)
   tf.summary.scalar('total_loss', total_loss)
   tf.summary.histogram('action', agent_outputs.action)
-
+  print("(atari_experiment.py) done: ", done)
+  print("(atari_experiment.py) infos: ", done)
   return done, infos, num_env_frames_and_train
 
 
@@ -439,12 +440,9 @@ def create_atari_environment(env_id, seed, is_test=False):
   }
   env_proxy = py_process.PyProcess(environments.PyProcessAtari, 
                                    env_id, config, FLAGS.num_action_repeats, seed)
-#   print("Inside create_atari_environment: ", env_proxy)
-  environment = environments.FlowEnvironment(env_proxy.proxy)
-#   print("Creating the environment: ", environment)
-  return environment
 
-# test = create_atari_environment("Pong-v0", seed=1)
+  environment = environments.FlowEnvironment(env_proxy.proxy)
+  return environment
 
 
 @contextlib.contextmanager
@@ -497,22 +495,11 @@ def train(action_set, level_names):
   # Only used to find the actor output structure.
   with tf.Graph().as_default():
     
-    # TODO: initialize Atari environment
-    # print("Created atari envrionment")
     env = create_atari_environment(level_names[0], seed=1)
-    # print("After creating environment")
     agent = Agent(len(action_set))
-    # print("Stil here")
-    structure = build_actor(agent, env, level_names[0], action_set)
-    # print("Structure :", structure)
-    # env = create_dm30_environment(level_names[0], seed=1)
-    # structure = build_actor(agent, env, level_names[0], action_set)
     flattened_structure = nest.flatten(structure)
-    # print("Flatened structure: ", flattened_structure)
     dtypes = [t.dtype for t in flattened_structure]
-    # print("Dtypes from flattened structure: ", dtypes)
     shapes = [t.shape.as_list() for t in flattened_structure]
-    # print("Shapes from flattened structure: ", shapes)
 
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/cpu'), \
@@ -546,15 +533,9 @@ def train(action_set, level_names):
         # TODO: Modify this to atari environment 
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
-        # TODO: Modifiy this to creat atari envirionment
-        # env = create_dm30_environment(level_name, seed=i + 1)
         env = create_atari_environment(level_name, seed=i + 1)
-        # print(env.initial())
-        # TODO: Modify to atari environment
-        actor_output = build_actor(agent, env, level_name, action_set)
-        # print("(atari_experiment.py) environment type: ", env)
         
-        # print("Actor output is: ", actor_output)
+        actor_output = build_actor(agent, env, level_name, action_set)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
 
@@ -747,7 +728,6 @@ def get_seed():
   seed = 1
 
 if __name__ == '__main__':
-    # test_env = create_atari_environment("Pong-v0", seed=1)
     get_seed()
     tf.app.run()    
 
