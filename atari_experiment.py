@@ -496,10 +496,13 @@ def train(action_set, level_names):
   with tf.Graph().as_default():
     
     env = create_atari_environment(level_names[0], seed=1)
+
     agent = Agent(len(action_set))
+    structure = build_actor(agent, env, level_names[0], action_set)
     flattened_structure = nest.flatten(structure)
-    dtypes = [t.dtype for t in flattened_structure]
+    dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
+
 
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/cpu'), \
@@ -530,12 +533,13 @@ def train(action_set, level_names):
     enqueue_ops = []
     for i in range(FLAGS.num_actors):
       if is_actor_fn(i):
-        # TODO: Modify this to atari environment 
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
-        
+        # TODO: Modify to atari environment
         actor_output = build_actor(agent, env, level_name, action_set)
+        
+        # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
 
@@ -558,7 +562,23 @@ def train(action_set, level_names):
       # Create batch (time major) and recreate structure.
       dequeued = queue.dequeue_many(FLAGS.batch_size)
       dequeued = nest.pack_sequence_as(structure, dequeued)
-
+      # Learn on boxing. 
+      # keep the architecture small 
+      # grey scale it
+      # use boxing 
+      # Save checkpoint for each game. 
+      # 1. Ensure it trains on Single game Atari
+      # 2. run IMPALA all at once
+      # 3. Comparison wiht DeepMindLab30
+      # 4. Try to train on subset of the games - make sure it works. 
+      # get it run on boxing 
+      # results next weeek
+      # do multiple games (subset)
+      # do the multi-task when waiting for results. 
+      # self attenntion. 
+      # transformer architecture. 
+      # implcitiyly learn shared policy - can help with vans 
+      # need to use visual 
       def make_time_major(s):
         return nest.map_structure(
             lambda t: tf.transpose(t, [1, 0] + list(range(t.shape.ndims))[2:]), s)
@@ -601,7 +621,8 @@ def train(action_set, level_names):
         # TODO: Modify this to be able to handle atari
         # env_returns = {env_id: [] for env_id in env_ids}
         level_returns = {level_name: [] for level_name in level_names}
-        summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
+        # COMMENT OUT SUMMARY WRITER IF NEEDED
+        # summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
 
         # Prepare data for first run.
         session.run_step_fn(
@@ -630,7 +651,7 @@ def train(action_set, level_names):
                               simple_value=episode_return)
             summary.value.add(tag=level_name + '/episode_frames',
                               simple_value=episode_frames)
-            summary_writer.add_summary(summary, num_env_frames_v)
+            # summary_writer.add_summary(summary, num_env_frames_v)
             # TODO: Modify to Atari
             # if FLAGS.level_name == 'dmlab30':
             level_returns[level_name].append(episode_return)
@@ -653,7 +674,7 @@ def train(action_set, level_names):
                 tag='dmlab30/training_no_cap', simple_value=no_cap)
             summary.value.add(
                 tag='dmlab30/training_cap_100', simple_value=cap_100)
-            summary_writer.add_summary(summary, num_env_frames_v)
+            # summary_writer.add_summary(summary, num_env_frames_v)
 
             # Clear level scores.
             # TODO MOdify to Atari
@@ -668,7 +689,8 @@ def train(action_set, level_names):
 
 
 ATARI_MAPPING = collections.OrderedDict([
-    ('Pong-v0', 'Pong-v0'),
+  ('Boxing-v0', 'Boxing-v0')
+    # ('Pong-v0', 'Pong-v0'),
     # ('Breakout-v0', 'Breakout-v0'),
     # ('Breakout-v0', 'Breakout-v0')
 ])
@@ -710,7 +732,7 @@ def main(_):
     seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
                               'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
     spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-
+    boxing_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
     # pong_action_values = (0, 1, 2, 3, 4, 5)
     # action_set = environments.DEFAULT_ACTION_SET
     # aciont_set = ACTION_SET_
@@ -728,6 +750,7 @@ def get_seed():
   seed = 1
 
 if __name__ == '__main__':
+    # test_env = create_atari_environment("Pong-v0", seed=1)
     get_seed()
     tf.app.run()    
 
