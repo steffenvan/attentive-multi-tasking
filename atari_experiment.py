@@ -579,6 +579,11 @@ def train(action_set, level_names):
       # transformer architecture. 
       # implcitiyly learn shared policy - can help with vans 
       # need to use visual 
+
+    #   python atari_experiment.py --job_name=learner --num_actors=1 \
+    # --level_name=Boxing-v0 --batch_size=1 --entropy_cost=0.0033391318945337044 \
+    # --learning_rate=0.00031866995608948655 \
+    # --total_environment_frames=10000000000 --reward_clipping=soft_asymmetric
       def make_time_major(s):
         return nest.map_structure(
             lambda t: tf.transpose(t, [1, 0] + list(range(t.shape.ndims))[2:]), s)
