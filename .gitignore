@@ -1,2 +1,10 @@
 *.pyc
 .vscode/
+atari_envs.py
+batcher.so
+code-server/
+experiment(not real).py
+real_experiment.py
+test.txt
+test_atari.py
+
