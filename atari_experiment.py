@@ -47,7 +47,7 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
 # Training.
 flags.DEFINE_integer('total_environment_frames', int(1e9),
                      'Total environment frames to train for.')
-flags.DEFINE_integer('num_actors', 4, 'Number of actors.')
+flags.DEFINE_integer('num_actors', 8, 'Number of actors.')
 flags.DEFINE_integer('batch_size', 2, 'Batch size for training.')
 flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
@@ -635,22 +635,31 @@ def train(action_set, level_names):
 
         # Execute learning and track performance.
         num_env_frames_v = 0
+        total_episode_frames = 0
+        average_frames = 12000
         # TODO: Modify to Atari 
+        total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
           print("(atari_experiment.py) num_env_frames: ", num_env_frames_v)
           level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
               (data_from_actors.level_name,) + output + (stage_op,))
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
-
+          total_episode_frames = num_env_frames_v
           for level_name, episode_return, episode_step in zip(
               level_names_v[done_v],
               infos_v.episode_return[done_v],
               infos_v.episode_step[done_v]):
             episode_frames = episode_step * FLAGS.num_action_repeats
 
-            tf.logging.info('Level: %s Episode return: %f',
-                            level_name, episode_return)
+            total_episode_return += episode_return
+            print("Current episode return: ", episode_return)
+            print("Episode step: ", episode_step)
+            tf.logging.info('Level: %s Episode return: %f after %d frames',
+                            level_name, episode_return, num_env_frames_v)
+            print("total_episode return: ", total_episode_return)
 
+            
+            # episode_return = 0
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
@@ -660,20 +669,32 @@ def train(action_set, level_names):
             # TODO: Modify to Atari
             # if FLAGS.level_name == 'dmlab30':
             level_returns[level_name].append(episode_return)
-            # print("(atari_experiment.py) level_returns: ", level_returns)
 
-          if min(map(len, level_returns.values())) >= 1:
+          # Calculate total reward after last X frames
+          if total_episode_frames % average_frames == 0:
+            with open("test.txt", "a+") as f:
+              f.write("Total frames:%d total_return: %f last %d frames\n" % (num_env_frames_v, total_episode_return, average_frames))
+
+            tf.logging.info('Level: %s total return %f last %d frames', 
+                            level_name, total_episode_return, average_frames)
+            total_episode_return = 0 
+            total_episode_frames = 0
+
+          current_episode_return_list = min(map(len, level_returns.values())) 
+          if current_episode_return_list >= 1:
             no_cap = dmlab30.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
-        
-            print("(atari_experiment) No cap: ", no_cap)
             cap_100 = dmlab30.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
-            with open("test.txt", "a+") as f:
-              f.write("num env frames: %d\n" % num_env_frames_v)
-              f.write("no cap: %f\n" % no_cap)
-              f.write("cap 100: %f\n" % cap_100)
-            print("(atari_experiment) cap 100: ", cap_100)
+            # if total_episode_frames % average_frames == 0:
+            #   with open("test.txt", "a+") as f:
+            #       # f.write("num env frames: %d\n" % num_env_frames_v)
+            #       f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
+            #       f.write("no cap: %f\n after %d frames" % (no_cap, average_frames ))
+            #       f.write("cap 100: %f\n after %d frames" % (cap_100, average_frames))
+            # print("(atari_experiment) No cap: ", no_cap)
+            # print("(atari_experiment) cap 100: ", cap_100)
+
             summary = tf.summary.Summary()
             summary.value.add(
                 tag='dmlab30/training_no_cap', simple_value=no_cap)
@@ -684,6 +705,7 @@ def train(action_set, level_names):
             # Clear level scores.
             # TODO MOdify to Atari
             level_returns = {level_name: [] for level_name in level_names}
+            # print("level_returns: ", level_returns)
 
       else:
         # Execute actors (they just need to enqueue their output).
