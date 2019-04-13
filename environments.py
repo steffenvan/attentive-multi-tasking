@@ -25,7 +25,7 @@ import atari_wrappers
 import numpy as np
 import tensorflow as tf
 
-import deepmind_lab
+# import deepmind_lab
 
 
 nest = tf.contrib.framework.nest
@@ -170,7 +170,7 @@ class PyProcessAtari(object):
       # it expects a tuple, where the second argument must be an empty string? 
       # print("(environments.py) initial_shape_atari: ", initial_obs.shape)
       self.counter = 0
-      return initial_obs, " "
+      return initial_obs
     
     def render(self):
       return self._env.render()
@@ -194,7 +194,7 @@ class PyProcessAtari(object):
       # if 
       # print("(environments.py info is: ", info["ale.lives"])
 
-      return reward, is_done, obs, str(info)
+      return reward, is_done, obs
 
     @staticmethod
     def _tensor_specs(method_name, unused_kwargs, constructor_kwargs):
@@ -205,10 +205,7 @@ class PyProcessAtari(object):
       # print("(environments.py) width: ", width)
       # print("(environments.py) height: ", height)
 
-      observation_spec = [
-          tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8),
-          tf.contrib.framework.TensorSpec([], tf.string)
-      ]
+      observation_spec = tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8)
 
       if method_name == 'initial':
         # print("(environments.py) obs_specs are: ", observation_spec)

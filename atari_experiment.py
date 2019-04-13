@@ -40,7 +40,7 @@ flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 flags.DEFINE_integer('test_num_episodes', 10, 'Number of episodes per level.')
 
 # Flags used for distributed training.
-flags.DEFINE_integer('task', 0, 'Task id. Use -1 for local training.')
+flags.DEFINE_integer('task', -1, 'Task id. Use -1 for local training.')
 flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
                   'Job name. Ignored when task is set to -1.')
 
@@ -126,7 +126,7 @@ class Agent(snt.RNNCore):
             
     def _torso(self, input_):
         last_action, env_output = input_
-        reward, _, _, (frame, instruction) = env_output
+        reward, _, _, frame = env_output
         # print("Instruction is: ", instruction)
 
         # Convert to floats.
