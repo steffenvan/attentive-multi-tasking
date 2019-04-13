@@ -670,7 +670,7 @@ def train(action_set, level_names):
                   # f.write("num env frames: %d\n" % num_env_frames_v)
                   f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
                   f.write("no cap: %f\n after %d frames" % (no_cap, num_env_frames_v))
-                  f.write("cap 100: %f\n after %d frames" % (cap_100, num_env_frames_vs))
+                  f.write("cap 100: %f\n after %d frames" % (cap_100, num_env_frames_v))
          #   print("(atari_experiment) No cap: ", no_cap)
          #   print("(atari_experiment) cap 100: ", cap_100)
 
