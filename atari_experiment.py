@@ -562,28 +562,7 @@ def train(action_set, level_names):
       # Create batch (time major) and recreate structure.
       dequeued = queue.dequeue_many(FLAGS.batch_size)
       dequeued = nest.pack_sequence_as(structure, dequeued)
-      # Learn on boxing. 
-      # keep the architecture small 
-      # grey scale it
-      # use boxing 
-      # Save checkpoint for each game. 
-      # 1. Ensure it trains on Single game Atari
-      # 2. run IMPALA all at once
-      # 3. Comparison wiht DeepMindLab30
-      # 4. Try to train on subset of the games - make sure it works. 
-      # get it run on boxing 
-      # results next weeek
-      # do multiple games (subset)
-      # do the multi-task when waiting for results. 
-      # self attenntion. 
-      # transformer architecture. 
-      # implcitiyly learn shared policy - can help with vans 
-      # need to use visual 
 
-    #   python atari_experiment.py --job_name=learner --num_actors=1 \
-    # --level_name=Boxing-v0 --batch_size=1 --entropy_cost=0.0033391318945337044 \
-    # --learning_rate=0.00031866995608948655 \
-    # --total_environment_frames=10000000000 --reward_clipping=soft_asymmetric
       def make_time_major(s):
         return nest.map_structure(
             lambda t: tf.transpose(t, [1, 0] + list(range(t.shape.ndims))[2:]), s)
@@ -675,8 +654,8 @@ def train(action_set, level_names):
             with open("logging.txt", "a+") as f:
               f.write("Total frames:%d total_return: %f last %d frames\n" % (num_env_frames_v, total_episode_return, average_frames))
 
-            tf.logging.info('total return %f last %d frames', 
-                            total_episode_return, average_frames)
+            # tf.logging.info('total return %f last %d frames', 
+            #                 total_episode_return, average_frames)
             total_episode_return = 0 
             total_episode_frames = 0
 
@@ -686,12 +665,12 @@ def train(action_set, level_names):
                                                             per_level_cap=None)
             cap_100 = dmlab30.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
-             if total_episode_frames % average_frames == 0:
-               with open("test.txt", "a+") as f:
-                   # f.write("num env frames: %d\n" % num_env_frames_v)
-                   f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
-                   f.write("no cap: %f\n after %d frames" % (no_cap, num_env_frames_v))
-                   f.write("cap 100: %f\n after %d frames" % (cap_100, num_env_frames_vs))
+            if total_episode_frames % average_frames == 0:
+              with open("test.txt", "a+") as f:
+                  # f.write("num env frames: %d\n" % num_env_frames_v)
+                  f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
+                  f.write("no cap: %f\n after %d frames" % (no_cap, num_env_frames_v))
+                  f.write("cap 100: %f\n after %d frames" % (cap_100, num_env_frames_vs))
          #   print("(atari_experiment) No cap: ", no_cap)
          #   print("(atari_experiment) cap 100: ", cap_100)
 
@@ -722,33 +701,13 @@ ATARI_MAPPING = collections.OrderedDict([
     # ('Breakout-v0', 'Breakout-v0')
 ])
 
-ATARI_GAMES_ACTIONS = collections.OrderedDict([('BeamRider-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')), 
-                                               ('Breakout-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT')), 
-                                               ('Pong-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')), 
-                                               ('Qbert-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')), 
-                                               ('Seaquest-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')), 
-                                               ('SpaceInvaders-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'))])
+# ATARI_GAMES_ACTIONS = collections.OrderedDict([('BeamRider-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')), 
+#                                                ('Breakout-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT')), 
+#                                                ('Pong-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')), 
+#                                                ('Qbert-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')), 
+#                                                ('Seaquest-v0', ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')), 
+#                                                ('SpaceInvaders-v0', ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'))])
 
-
-
-# def get_action_space(env_id, index):
-#     for key in ATARI_MAPPING.keys():
-#       if "Beamrider" in key: 
-#         action_space = get_action_space(key, 0)
-#       elif "Breakout" in key:
-#         action_space = get_action_space(key, 1)
-#       elif "Pong" in key:
-#         action_space = get_action_space(key, 2)
-#       elif "Qbert" in key:
-#         action_space = get_action_space(key, 3)
-#       elif "Seaquest" in key:
-#         action_space = get_action_space(key, 4)
-#       elif "Space" in key: 
-#         action_space = get_action_space(key, 5)
-#   action_space = ATARI_GAMES_ACTIONS[env_id[index]]
-#   return action_space
-# print(ATARI_MAPPING.keys()[0])
-# print(get_action_space(ATARI_MAPPING.keys(), 0))
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
