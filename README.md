@@ -1,82 +1,75 @@
-# Scalable Distributed Deep-RL with Importance Weighted Actor-Learner Architectures
+# My bachelor thesis  - Attentive multi-tasking
 
-This repository contains an implementation of "Importance Weighted Actor-Learner
-Architectures", along with a *dynamic batching* module. This is not an
-officially supported Google product.
+## Current status
+- Now running on Atari games (only one at a time though).
+- The reward quickly converges to a fixed (non-optimal) value after ~1600 frames. 
 
-For a detailed description of the architecture please read [our paper][arxiv].
-Please cite the paper if you use the code from this repository in your work.
+## TODO 
+- Modify `environments.py` to render the agents actions (by 11th of April).
+- Train on the 6 Atari games and obtain the results (by 16th of April).
+- Add PNN to the architecture (by 25th of April).
+- More...
 
-### Bibtex
-
-```
-@inproceedings{impala2018,
-  title={IMPALA: Scalable Distributed Deep-RL with Importance Weighted Actor-Learner Architectures},
-  author={Espeholt, Lasse and Soyer, Hubert and Munos, Remi and Simonyan, Karen and Mnih, Volodymir and Ward, Tom and Doron, Yotam and Firoiu, Vlad and Harley, Tim and Dunning, Iain and others},
-  booktitle={Proceedings of the International Conference on Machine Learning (ICML)},
-  year={2018}
-}
-```
 
 ## Running the Code
 
 ### Prerequisites
 
-[TensorFlow][tensorflow] >=1.9.0-dev20180530, the environment
-[DeepMind Lab][deepmind_lab] and the neural network library
-[DeepMind Sonnet][sonnet]. Although we use [DeepMind Lab][deepmind_lab] in this
-release, the agent has been successfully applied to other domains such as
-[Atari][arxiv], [Street View][learning_nav] and has been modified to
-[generate images][generate_images].
-
+- [TensorFlow][tensorflow] >=1.9.0-dev20180530, the environment
+- [DeepMind Lab][deepmind_lab] (if you want to try the original implementation `experiment.py`).  
+- [DeepMind Sonnet][sonnet].
+- [Atari](http://gym.openai.com/) 
 We include a [Dockerfile][dockerfile] that serves as a reference for the
 prerequisites and commands needed to run the code.
 
 ### Single Machine Training on a Single Level
 
-Training on `explore_goal_locations_small`. Most runs should end up with average
-episode returns around 200 or around 250 after 1B frames.
-
+#### Training on `Pong-v0`. 
+Run the code on [Pong](https://gym.openai.com/envs/Pong-v0/):
 ```sh
-python experiment.py --num_actors=48 --batch_size=32
+python atari_experiment.py --num_actors=8 --batch_size=4
 ```
 
 Adjust the number of actors (i.e. number of environments) and batch size to
 match the size of the machine it runs on. A single actor, including DeepMind
 Lab, requires a few hundred MB of RAM.
 
-### Distributed Training on DMLab-30
 
-Training on the full [DMLab-30][dmlab30]. Across 10 runs with different seeds
-but identical hyperparameters, we observed between 45 and 50 capped human
-normalized training score with different seeds (`--seed=[seed]`). Test scores
-are usually an absolute of ~2% lower.
-
-#### Learner
+#### Learner (for Atari)
 
 ```sh
-python experiment.py --job_name=learner --task=0 --num_actors=150 \
-    --level_name=dmlab30 --batch_size=32 --entropy_cost=0.0033391318945337044 \
+python atari_experiment.py --job_name=learner --task=0 --num_actors=16 \
+    --level_name=Pong-v0 --batch_size=4 --entropy_cost=0.0033391318945337044 \
     --learning_rate=0.00031866995608948655 \
     --total_environment_frames=10000000000 --reward_clipping=soft_asymmetric
+```
+
+#### Test Score (Doesn't work for Atari at the moment)
+
+```sh
+python atari_experiment.py --mode=test --level_name=Pong-v0 --dataset_path=[...] \
+    --test_num_episodes=10
 ```
 
 #### Actor(s)
 
 ```sh
-for i in $(seq 0 149); do
-  python experiment.py --job_name=actor --task=$i \
-      --num_actors=150 --level_name=dmlab30 --dataset_path=[...] &
+for i in $(seq 0 15); do
+  python atari_experiment.py --job_name=actor --task=$i \
+      --num_actors=16 --level_name=Pong-v0 &
 done;
 wait
 ```
 
-#### Test Score
+### Distributed Training on DMLab-30
 
-```sh
-python experiment.py --mode=test --level_name=dmlab30 --dataset_path=[...] \
-    --test_num_episodes=10
-```
+Training on the full *Atari*. Across 10 runs with different seeds
+but identical hyperparameters, we observed between 45 and 50 capped human
+normalized training score with different seeds (`--seed=[seed]`). Test scores
+are usually an absolute of ~2% lower.
+
+
+This work is an extension to Deepmind recent result (Epseholt et al. 2018): 
 
 [arxiv]: https://arxiv.org/abs/1802.01561
 [deepmind_lab]: https://github.com/deepmind/lab
