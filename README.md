@@ -1,4 +1,4 @@
-# My bachelor thesis  - Attentive multi-tasking
+# Bachelor Thesis - Attentive multi-tasking
 
 ## Current status
 - Showing results with Boxing.
