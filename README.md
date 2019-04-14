@@ -46,16 +46,16 @@ python atari_experiment.py --job_name=learner --task=0 --num_actors=16 \
 #### Actor(s)
 
 ```sh
-for i in $(seq 0 15); do
+for i in $(seq 0 23); do
   python atari_experiment.py --job_name=actor --task=$i \
-      --num_actors=16 --level_name=Pong-v0 &
+      --num_actors=24 --level_name=Boxing-v0 &
 done;
 wait
 ```
 #### Test Score 
 
 ```sh
-python atari_experiment.py --mode=test --level_name=Pong-v0 --dataset_path=[...] \
+python atari_experiment.py --mode=test --level_name=Boxing-v0 \
     --test_num_episodes=10
 ```
 
