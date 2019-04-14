@@ -1,14 +1,13 @@
 # My bachelor thesis  - Attentive multi-tasking
 
 ## Current status
-- Now running on Atari games (only one at a time though).
-- The reward quickly converges to a fixed (non-optimal) value after ~1600 frames. 
+- Showing results with Boxing.
+- Agent stabilizes after ~50 mio frames. 
 
 ## TODO 
-- Modify `environments.py` to render the agents actions (by 11th of April).
 - Train on the 6 Atari games and obtain the results (by 16th of April).
 - Add PNN to the architecture (by 25th of April).
-- More...
+- Add PopArt to the architecture (by 27th of April)
 
 
 ## Running the Code
@@ -24,17 +23,17 @@ prerequisites and commands needed to run the code.
 
 ### Single Machine Training on a Single Level
 
-#### Training on `Pong-v0`. 
-Run the code on [Pong](https://gym.openai.com/envs/Pong-v0/):
-```sh
-python atari_experiment.py --num_actors=8 --batch_size=4
-```
+#### Training on `Boxing-v0`. 
+Run the code on [Boxing](https://gym.openai.com/envs/Boxing-v0/)
 
 Adjust the number of actors (i.e. number of environments) and batch size to
 match the size of the machine it runs on. A single actor, including DeepMind
 Lab, requires a few hundred MB of RAM.
 
+### To run it in a distributed setting 
+I recommend using tmux or any multiplexer to run it easily. 
 
+##### Start with one window:
 #### Learner (for Atari)
 
 ```sh
@@ -43,14 +42,7 @@ python atari_experiment.py --job_name=learner --task=0 --num_actors=16 \
     --learning_rate=0.00031866995608948655 \
     --total_environment_frames=10000000000 --reward_clipping=soft_asymmetric
 ```
-
-#### Test Score (Doesn't work for Atari at the moment)
-
-```sh
-python atari_experiment.py --mode=test --level_name=Pong-v0 --dataset_path=[...] \
-    --test_num_episodes=10
-```
-
+##### And another
 #### Actor(s)
 
 ```sh
@@ -60,10 +52,14 @@ for i in $(seq 0 15); do
 done;
 wait
 ```
+#### Test Score 
 
-### Distributed Training on DMLab-30
+```sh
+python atari_experiment.py --mode=test --level_name=Pong-v0 --dataset_path=[...] \
+    --test_num_episodes=10
+```
 
-Training on the full *Atari*. Across 10 runs with different seeds
+Training on the specific *Atari* game. Across 10 runs with different seeds
 but identical hyperparameters, we observed between 45 and 50 capped human
 normalized training score with different seeds (`--seed=[seed]`). Test scores
 are usually an absolute of ~2% lower.
