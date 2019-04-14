@@ -37,10 +37,10 @@ I recommend using tmux or any multiplexer to run it easily.
 #### Learner (for Atari)
 
 ```sh
-python atari_experiment.py --job_name=learner --task=0 --num_actors=16 \
-    --level_name=Pong-v0 --batch_size=4 --entropy_cost=0.0033391318945337044 \
-    --learning_rate=0.00031866995608948655 \
-    --total_environment_frames=10000000000 --reward_clipping=soft_asymmetric
+python atari_experiment.py --job_name=learner --task=0 --num_actors=24 \
+    --level_name=Boxing-v0 --batch_size=8 --entropy_cost=0.01 \
+    --learning_rate=0.0006 \
+    --total_environment_frames=2000000000 --reward_clipping=soft_asymmetric
 ```
 ##### And another
 #### Actor(s)
