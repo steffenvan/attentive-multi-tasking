@@ -241,6 +241,6 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, 
     if clip_rewards:
         env = ClipRewardEnv(env)
     if frame_stack:
-        env = FrameStack(env, 3)
+        env = FrameStack(env, 4)
         
     return env  

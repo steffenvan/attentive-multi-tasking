@@ -25,7 +25,7 @@ import atari_wrappers
 import numpy as np
 import tensorflow as tf
 
-# import deepmind_lab
+import deepmind_lab
 
 
 nest = tf.contrib.framework.nest
@@ -99,12 +99,6 @@ class PyProcessDmLab(object):
   def initial(self):
     self._reset()
     obs = self._observation()
-    # print("Obs: ", obs)
-    # print("Initial obs: ", type(obs))
-    # print("Shape obs: ", np.array(obs).shape)
-    # print("Obs shape: ", np.array(obs)[0].shape)
-    # print("This is initial obs: ", obs[0])
-    # print("Length of obs: ", len(obs[0]))
     return obs
 
   def step(self, action):
@@ -126,8 +120,6 @@ class PyProcessDmLab(object):
     """Returns a nest of `TensorSpec` with the method's output specification."""
     width = constructor_kwargs['config'].get('width', 320)
     height = constructor_kwargs['config'].get('height', 240)
-    # print("(environments.py) width: ", width)
-    # print("(environments.py) height: ", height)
 
     observation_spec = [
         tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8),
@@ -158,6 +150,7 @@ class PyProcessAtari(object):
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
+
     def initial(self):
       initial_obs = self._env.reset()
       return initial_obs
@@ -248,9 +241,6 @@ class FlowEnvironment(object):
       initial_state = (initial_flow, initial_info)
       return initial_output, initial_state
 
-    # print("This is environment: ", self._env)
-
-
   def step(self, action, state):
     """Takes a step in the environment.
 
@@ -286,6 +276,6 @@ class FlowEnvironment(object):
           new_info)
 
       output = StepOutput(reward, new_info, done, observation)
-      # print("(environments.py) step reward: ", reward)
+
       return output, new_state
 
