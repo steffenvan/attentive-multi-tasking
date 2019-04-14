@@ -157,7 +157,7 @@ class PyProcessAtari(object):
 
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id)
-      self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=False)
+      self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
     def initial(self):
       initial_obs = self._env.reset()
       return initial_obs
@@ -167,7 +167,6 @@ class PyProcessAtari(object):
 
     def step(self, action):
       obs, reward, is_done, _ = self._env.step(action)
-      self.counter += 1
       self._env.render()
       done = np.array(is_done)
       reward = np.float32(reward)
@@ -184,7 +183,7 @@ class PyProcessAtari(object):
       width = constructor_kwargs['config'].get('width', 210)
       height = constructor_kwargs['config'].get('height', 160)
 
-      observation_spec = tf.contrib.framework.TensorSpec([height, width, 1], tf.uint8)
+      observation_spec = tf.contrib.framework.TensorSpec([height, width, 4], tf.uint8)
 
       if method_name == 'initial':
         # print("(environments.py) obs_specs are: ", observation_spec)
