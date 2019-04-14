@@ -65,7 +65,7 @@ normalized training score with different seeds (`--seed=[seed]`). Test scores
 are usually an absolute of ~2% lower.
 
 
-This work is an extension to Deepmind recent result (Epseholt et al. 2018): 
+This work is an extension to Deepmind recent result (Espeholt et al. 2018): 
 
 [arxiv]: https://arxiv.org/abs/1802.01561
 [deepmind_lab]: https://github.com/deepmind/lab
