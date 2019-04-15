@@ -33,6 +33,19 @@ flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
 
+# Loss settings.
+flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
+flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
+flags.DEFINE_float('discounting', .99, 'Discounting factor.')
+flags.DEFINE_enum('reward_clipping', 'abs_one', ['abs_one', 'soft_asymmetric'],
+                  'Reward clipping.')
+
+# Optimizer settings.
+flags.DEFINE_float('learning_rate', 0.0006, 'Learning rate.')
+flags.DEFINE_float('decay', .99, 'RMSProp optimizer decay.')
+flags.DEFINE_float('momentum', 0., 'RMSProp momentum.')
+flags.DEFINE_float('epsilon', .01, 'RMSProp epsilon.')
+
 class Agent(snt.RNNCore):
 
     def __init__(self, num_actions):
@@ -290,12 +303,12 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
       lambda t: t[1:], env_outputs)
   learner_outputs = nest.map_structure(lambda t: t[:-1], learner_outputs)
 
-  # if FLAGS.reward_clipping == 'abs_one':
-  #   clipped_rewards = tf.clip_by_value(rewards, -1, 1)
-  # elif FLAGS.reward_clipping == 'soft_asymmetric':
-  #   squeezed = tf.tanh(rewards / 5.0)
-  #   # Negative rewards are given less weight than positive rewards.
-  #   clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
+  if FLAGS.reward_clipping == 'abs_one':
+    clipped_rewards = tf.clip_by_value(rewards, -1, 1)
+  elif FLAGS.reward_clipping == 'soft_asymmetric':
+    squeezed = tf.tanh(rewards / 5.0)
+    # Negative rewards are given less weight than positive rewards.
+    clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
 
   discounts = tf.to_float(~done) * FLAGS.discounting
 
@@ -339,6 +352,5 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
   tf.summary.scalar('learning_rate', learning_rate)
   tf.summary.scalar('total_loss', total_loss)
   tf.summary.histogram('action', agent_outputs.action)
-  print("(atari_experiment.py) done: ", done)
-  print("(atari_experiment.py) infos: ", done)
+
   return done, infos, num_env_frames_and_train

@@ -46,19 +46,6 @@ flags.DEFINE_integer('task', -1, 'Task id. Use -1 for local training.')
 flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
                   'Job name. Ignored when task is set to -1.')
 
-# Loss settings.
-flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
-flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
-flags.DEFINE_float('discounting', .99, 'Discounting factor.')
-# flags.DEFINE_enum('reward_clipping', 'abs_one', ['abs_one', 'soft_asymmetric'],
-#                   'Reward clipping.')
-
-# Optimizer settings.
-flags.DEFINE_float('learning_rate', 0.0006, 'Learning rate.')
-flags.DEFINE_float('decay', .99, 'RMSProp optimizer decay.')
-flags.DEFINE_float('momentum', 0., 'RMSProp momentum.')
-flags.DEFINE_float('epsilon', .01, 'RMSProp epsilon.')
-
 # Atari environments
 
 flags.DEFINE_integer('width', 84, 'Width of observation')
