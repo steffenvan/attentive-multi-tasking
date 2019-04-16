@@ -126,7 +126,7 @@ def train(level_names):
   with tf.Graph().as_default():
     
     env_counter = 0
-    specific_atari_game = level_names[0 + env_counter]
+    specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     current_action_set = specific_action_set[specific_atari_game]
     print("Current game: {} with action set {}".format(specific_atari_game, current_action_set))
@@ -135,8 +135,6 @@ def train(level_names):
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
-    print("environment counter: ", env_counter)
-    # print("Shapes: ", shapes)
 
 
   with tf.Graph().as_default(), \
@@ -177,7 +175,7 @@ def train(level_names):
 
         actor_output = build_actor(agent, env, level_name, current_action_set)
         
-        print("Actor output is: ", actor_output)
+        # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
 
@@ -224,7 +222,6 @@ def train(level_names):
         output = build_learner(agent, data_from_actors.agent_state,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs)
-        print("Herpderp")
 
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
@@ -371,8 +368,8 @@ ATARI_MAPPING = collections.OrderedDict([
 ])
 
 beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
-breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT')
-pong_action_values = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', "PADDING", "PADDING")
+pong_action_values     = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
 qbert_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')
 seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
@@ -381,7 +378,7 @@ spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LE
 
 specific_action_set = {
   "Beamrider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-  "Breakout-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT'),
+  "Breakout-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'NOOP', 'NOOP'),
   "Pong-v0": ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
   "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
   "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
