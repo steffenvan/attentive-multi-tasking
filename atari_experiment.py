@@ -166,7 +166,8 @@ def train(level_names):
     enqueue_ops = []
     for i in range(FLAGS.num_actors):
       if is_actor_fn(i):
-        level_name = level_names[i % len(level_names)]
+        # level_name = level_names[i % len(level_names)]
+        level_name = "Pong-v0"
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
         # Get the action set for the different atari games. 
@@ -174,7 +175,7 @@ def train(level_names):
         tf.logging.info('Current game: {} with action set: {}'.format(level_name, current_action_set))
 
         actor_output = build_actor(agent, env, level_name, current_action_set)
-        
+        print("(atari_experiment.py) Length of current action set: ", len(current_action_set))
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -182,6 +183,7 @@ def train(level_names):
     # If running in a single machine setup, run actors with QueueRunners
     # (separate threads).
     if is_learner and enqueue_ops:
+
       tf.train.add_queue_runner(tf.train.QueueRunner(queue, enqueue_ops))
 
     # Build learner.
@@ -320,7 +322,7 @@ def train(level_names):
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
-
+          print("ENQUEUE OPS: ", enqueue_ops)
           session.run(enqueue_ops)
 
 def test(action_set, level_names):
@@ -361,24 +363,22 @@ def test(action_set, level_names):
 
 
 ATARI_MAPPING = collections.OrderedDict([
-  # ('Boxing-v0', 'Boxing-v0')
     ('Pong-v0', 'Pong-v0'),
     ('Breakout-v0', 'Breakout-v0'),
-    # ('Breakout-v0', 'Breakout-v0')
 ])
 
-beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
-breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', "PADDING", "PADDING")
-pong_action_values     = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-qbert_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')
-seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
-                          'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
-spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+# beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
+# breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', "PADDING1", "PADDING2")
+# pong_action_values     = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+# qbert_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')
+# seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
+#                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
+# spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
 # print("Action set length: ", len(boxing_action_values))
 
 specific_action_set = {
   "Beamrider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-  "Breakout-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'NOOP', 'NOOP'),
+  "Breakout-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'PADDING1', 'PADDING2'),
   "Pong-v0": ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
   "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
   "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
@@ -388,7 +388,7 @@ specific_action_set = {
 def main(_):
 
     tf.logging.set_verbosity(tf.logging.INFO)
-    # action_set = environments.ATARI_ACTION_SET
+    action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
       train(ATARI_MAPPING.keys()) 
     else:
