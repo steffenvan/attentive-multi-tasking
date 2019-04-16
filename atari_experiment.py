@@ -166,8 +166,8 @@ def train(level_names):
     enqueue_ops = []
     for i in range(FLAGS.num_actors):
       if is_actor_fn(i):
-        # level_name = level_names[i % len(level_names)]
-        level_name = "Pong-v0"
+        level_name = level_names[i % len(level_names)]
+        # level_name = "Breakout-v0"
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
         # Get the action set for the different atari games. 
@@ -364,7 +364,8 @@ def test(action_set, level_names):
 
 ATARI_MAPPING = collections.OrderedDict([
     ('Pong-v0', 'Pong-v0'),
-    ('Breakout-v0', 'Breakout-v0'),
+    # ('Breakout-v0', 'Breakout-v0'),
+    ('SpaceInvaders-v0', 'SpaceInvaders-v0')
 ])
 
 # beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
@@ -379,7 +380,7 @@ ATARI_MAPPING = collections.OrderedDict([
 specific_action_set = {
   "Beamrider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
   "Breakout-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'PADDING1', 'PADDING2'),
-  "Pong-v0": ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+  "Pong-v0":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
   "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
   "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
