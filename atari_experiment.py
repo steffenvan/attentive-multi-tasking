@@ -323,9 +323,10 @@ def test(action_set, level_names):
     for level_name in level_names:
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
-
+    # TODO: Correct this to be able to handle all level names for each of their test run. 
+    logdir = os.path.join(FLAGS.logdir, level_names[0])
     with tf.train.SingularMonitoredSession(
-        checkpoint_dir=FLAGS.logdir,
+        checkpoint_dir=logdir,
         hooks=[py_process.PyProcessHook()]) as session:
       for level_name in level_names:
         tf.logging.info('Testing level: %s', level_name)
