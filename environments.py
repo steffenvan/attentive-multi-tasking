@@ -141,6 +141,7 @@ StepOutputInfo = collections.namedtuple('StepOutputInfo',
 StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
 
+ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
 # ATARI WRAPPER
 # TODO: Still need to modify this to be follow the same setup as the paper. 
 class PyProcessAtari(object):

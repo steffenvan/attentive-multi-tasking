@@ -91,8 +91,10 @@ def pin_global_variables(device):
   with tf.variable_scope('', custom_getter=getter) as vs:
     yield vs
 
-def train(action_set, level_names):
+def train(level_names):
   """Train."""
+
+  
   if is_single_machine():
     local_job_device = ''
     shared_job_device = ''
@@ -123,13 +125,18 @@ def train(action_set, level_names):
   # Only used to find the actor output structure.
   with tf.Graph().as_default():
     
-    env = create_atari_environment(level_names[0], seed=1)
-
-    agent = Agent(len(action_set))
-    structure = build_actor(agent, env, level_names[0], action_set)
+    env_counter = 0
+    specific_atari_game = level_names[0 + env_counter]
+    env = create_atari_environment(specific_atari_game, seed=1)
+    current_action_set = specific_action_set[specific_atari_game]
+    print("Current game: {} with action set {}".format(specific_atari_game, current_action_set))
+    agent = Agent(len(current_action_set))
+    structure = build_actor(agent, env, specific_atari_game, current_action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
+    print("environment counter: ", env_counter)
+    # print("Shapes: ", shapes)
 
 
   with tf.Graph().as_default(), \
@@ -140,7 +147,7 @@ def train(action_set, level_names):
     # Create Queue and Agent on the learner.
     with tf.device(shared_job_device):
       queue = tf.FIFOQueue(1, dtypes, shapes, shared_name='buffer')
-      agent = Agent(len(action_set))
+      agent = Agent(len(current_action_set))
 
       if is_single_machine() and 'dynamic_batching' in sys.modules:
         # For single machine training, we use dynamic batching for improved GPU
@@ -164,10 +171,13 @@ def train(action_set, level_names):
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
-        # TODO: Modify to atari environment
-        actor_output = build_actor(agent, env, level_name, action_set)
+        # Get the action set for the different atari games. 
+        current_action_set = specific_action_set[level_name]
+        tf.logging.info('Current game: {} with action set: {}'.format(level_name, current_action_set))
+
+        actor_output = build_actor(agent, env, level_name, current_action_set)
         
-        # print("Actor output is: ", actor_output)
+        print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
 
@@ -214,10 +224,13 @@ def train(action_set, level_names):
         output = build_learner(agent, data_from_actors.agent_state,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs)
+        print("Herpderp")
 
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
+    env_counter += 1
+    # logdir = os.path.join(FLAGS.logdir, level_names)
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
@@ -351,12 +364,11 @@ def test(action_set, level_names):
 
 
 ATARI_MAPPING = collections.OrderedDict([
-  ('Boxing-v0', 'Boxing-v0')
-    # ('Pong-v0', 'Pong-v0'),
-    # ('Breakout-v0', 'Breakout-v0'),
+  # ('Boxing-v0', 'Boxing-v0')
+    ('Pong-v0', 'Pong-v0'),
+    ('Breakout-v0', 'Breakout-v0'),
     # ('Breakout-v0', 'Breakout-v0')
 ])
-
 
 beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
 breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT')
@@ -365,15 +377,25 @@ qbert_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')
 seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
 spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-boxing_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
+# print("Action set length: ", len(boxing_action_values))
 
+specific_action_set = {
+  "Beamrider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+  "Breakout-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT'),
+  "Pong-v0": ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+  "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
+  "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
+                          'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
+  "SpaceInvaders-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+}
 def main(_):
+
     tf.logging.set_verbosity(tf.logging.INFO)
-    action_set = boxing_action_values
+    # action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
-      train(action_set, ATARI_MAPPING.keys()) 
+      train(ATARI_MAPPING.keys()) 
     else:
-      test(action_set, ATARI_MAPPING.keys())
+      test(ATARI_MAPPING.keys())
 
 def get_seed():
   global seed 

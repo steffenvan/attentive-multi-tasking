@@ -25,7 +25,7 @@ ActorOutput = collections.namedtuple(
 AgentOutput = collections.namedtuple('AgentOutput',
                                      'action policy_logits baseline')
 
-flags.DEFINE_integer('total_environment_frames', int(1e9),
+flags.DEFINE_integer('total_environment_frames', int(1e4),
                      'Total environment frames to train for.')
 flags.DEFINE_integer('num_actors', 1, 'Number of actors.')
 flags.DEFINE_integer('batch_size', 1, 'Batch size for training.')
