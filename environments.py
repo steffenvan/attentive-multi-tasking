@@ -141,7 +141,18 @@ StepOutputInfo = collections.namedtuple('StepOutputInfo',
 StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
 
+
 ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
+
+specific_action_set = {
+  "Beamrider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+  "Breakout-v0":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
+  "Pong-v0":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+  "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
+  "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
+                          'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
+  "SpaceInvaders-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+}
 # ATARI WRAPPER
 # TODO: Still need to modify this to be follow the same setup as the paper. 
 class PyProcessAtari(object):
@@ -151,7 +162,8 @@ class PyProcessAtari(object):
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
-
+      self.atari_game = env_id
+      # print("Action space size: ", self._env.action_space.n)
     def initial(self):
       initial_obs = self._env.reset()
       return initial_obs
@@ -160,6 +172,12 @@ class PyProcessAtari(object):
       return self._env.render()
 
     def step(self, action):
+      # If the current action exceeds the range of the specific game's action set length -> NOOP
+      length_of_specific_action_set = len(specific_action_set[self.atari_game])
+      
+      if action > length_of_specific_action_set:
+        obs, reward, is_done, _ = self._env.step(0)
+
       obs, reward, is_done, _ = self._env.step(action)
       self._env.render()
       done = np.array(is_done)
