@@ -61,7 +61,6 @@ def is_single_machine():
     return FLAGS.task == -1
 
 def create_atari_environment(env_id, seed, is_test=False):
-#   print("Before env proxy")
   config = {
       'width': 84,
       'height': 84,
@@ -103,8 +102,6 @@ def train(level_names):
     global_variable_device = '/gpu'
     server = tf.train.Server.create_local_server()
     filters = []
-    # print("Type of atari data structure: ", type(level_names))
-    # print("Should be atari games: ", level_names[0])
   else:
     local_job_device = '/job:%s/task:%d' % (FLAGS.job_name, FLAGS.task)
     shared_job_device = '/job:learner/task:0'
@@ -125,12 +122,11 @@ def train(level_names):
   # Only used to find the actor output structure.
   with tf.Graph().as_default():
     
-    env_counter = 0
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     current_action_set = specific_action_set[specific_atari_game]
-    print("Current game: {} with action set {}".format(specific_atari_game, current_action_set))
     agent = Agent(len(current_action_set))
+
     structure = build_actor(agent, env, specific_atari_game, current_action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
@@ -242,10 +238,8 @@ def train(level_names):
 
       if is_learner:
         # Logging.
-        # TODO: Modify this to be able to handle atari
-        # env_returns = {env_id: [] for env_id in env_ids}
         level_returns = {level_name: [] for level_name in level_names}
-        # COMMENT OUT SUMMARY WRITER IF NEEDED
+        # TODO: COMMENT OUT SUMMARY WRITER IF NEEDED
         # summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
 
         # Prepare data for first run.
@@ -255,8 +249,9 @@ def train(level_names):
         # Execute learning and track performance.
         num_env_frames_v = 0
         total_episode_frames = 0
-        average_frames = 24000
-        # TODO: Modify to Atari 
+        
+        # Log the total return every *average_frames*.  
+        average_frames = 24000 
         total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
         #  print("(atari_experiment.py) num_env_frames: ", num_env_frames_v)
@@ -301,12 +296,9 @@ def train(level_names):
                                                              per_level_cap=100)
             if total_episode_frames % average_frames == 0:
               with open("multi-actors-output.txt", "a+") as f:
-                  # f.write("num env frames: %d\n" % num_env_frames_v)
                   f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
                   f.write("no cap: %f after %d frames\n" % (no_cap, num_env_frames_v))
                   f.write("cap 100: %f after %d frames\n" % (cap_100, num_env_frames_v))
-         #   print("(atari_experiment) No cap: ", no_cap)
-         #   print("(atari_experiment) cap 100: ", cap_100)
 
             summary = tf.summary.Summary()
             summary.value.add(
@@ -336,9 +328,10 @@ def test(action_set, level_names):
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
     # TODO: Correct this to be able to handle all level names for each of their test run. 
-    logdir = os.path.join(FLAGS.logdir, level_names[0])
+    # Something like this
+    #logdir = os.path.join(FLAGS.logdir, level_names[0])
     with tf.train.SingularMonitoredSession(
-        checkpoint_dir=logdir,
+        checkpoint_dir=FLAGS.logdir,
         hooks=[py_process.PyProcessHook()]) as session:
       for level_name in level_names:
         tf.logging.info('Testing level: %s', level_name)
@@ -364,28 +357,20 @@ def test(action_set, level_names):
 
 ATARI_MAPPING = collections.OrderedDict([
     ('Pong-v0', 'Pong-v0'),
-    # ('Breakout-v0', 'Breakout-v0'),
-    ('SpaceInvaders-v0', 'SpaceInvaders-v0')
+    ('Breakout-v0', 'Breakout-v0'),
+    # ('SpaceInvaders-v0', 'SpaceInvaders-v0')
 ])
-
-# beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
-# breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', "PADDING1", "PADDING2")
-# pong_action_values     = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-# qbert_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')
-# seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
-#                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
-# spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-# print("Action set length: ", len(boxing_action_values))
 
 specific_action_set = {
   "Beamrider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-  "Breakout-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'PADDING1', 'PADDING2'),
+  "Breakout-v0":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
   "Pong-v0":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
   "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
   "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
   "SpaceInvaders-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
 }
+
 def main(_):
 
     tf.logging.set_verbosity(tf.logging.INFO)
