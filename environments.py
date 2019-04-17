@@ -158,11 +158,12 @@ specific_action_set = {
 class PyProcessAtari(object):
 
     def __init__(self, env_id, config, num_action_repeats, seed):
-
+      print(env_id)
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
       self.atari_game = env_id
+      self._action_space_n = self._env.action_space.n
       # print("Action space size: ", self._env.action_space.n)
     def initial(self):
       initial_obs = self._env.reset()
@@ -173,16 +174,13 @@ class PyProcessAtari(object):
 
     def step(self, action):
       # If the current action exceeds the range of the specific game's action set length -> NOOP
-      length_of_specific_action_set = len(specific_action_set[self.atari_game])
-      
-      if action > length_of_specific_action_set:
+      if action > self._action_space_n:
         obs, reward, is_done, _ = self._env.step(0)
-
       obs, reward, is_done, _ = self._env.step(action)
       self._env.render()
       done = np.array(is_done)
       reward = np.float32(reward)
-      
+        
       if done:
         self._env.reset() 
 
@@ -280,6 +278,9 @@ class FlowEnvironment(object):
       # Make sure the previous step has been executed before running the next
       # step.
       with tf.control_dependencies([flow]):
+        # if action > self._env._action_space_n:
+        #   self._env.step(0)
+        # else:
         reward, done, observation = self._env.step(action)
 
       with tf.control_dependencies(nest.flatten(observation)):
