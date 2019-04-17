@@ -163,8 +163,7 @@ class PyProcessAtari(object):
       self._env = atari_wrappers.make_atari(env_id)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
       self.atari_game = env_id
-      self._action_space_n = self._env.action_space.n
-      # print("Action space size: ", self._env.action_space.n)
+
     def initial(self):
       initial_obs = self._env.reset()
       return initial_obs
@@ -174,9 +173,10 @@ class PyProcessAtari(object):
 
     def step(self, action):
       # If the current action exceeds the range of the specific game's action set length -> NOOP
-      if action > self._action_space_n:
+      if action >= self._env.action_space.n:
         obs, reward, is_done, _ = self._env.step(0)
-      obs, reward, is_done, _ = self._env.step(action)
+      else: 
+        obs, reward, is_done, _ = self._env.step(action)
       self._env.render()
       done = np.array(is_done)
       reward = np.float32(reward)
