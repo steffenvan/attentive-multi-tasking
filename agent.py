@@ -25,7 +25,7 @@ ActorOutput = collections.namedtuple(
 AgentOutput = collections.namedtuple('AgentOutput',
                                      'action policy_logits baseline')
 
-flags.DEFINE_integer('total_environment_frames', int(1e4),
+flags.DEFINE_integer('total_environment_frames', int(2e8),
                      'Total environment frames to train for.')
 flags.DEFINE_integer('num_actors', 1, 'Number of actors.')
 flags.DEFINE_integer('batch_size', 1, 'Batch size for training.')
@@ -121,11 +121,9 @@ class Agent(snt.RNNCore):
 
         # Append clipped last reward and one hot last action.
         clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
-
         one_hot_last_action = tf.one_hot(last_action, self._num_actions)
-        # print("Clipped reward shape: ", tf.shape(clipped_reward))
-        # print("One hot shape: ", tf.shape(one_hot_last_action))
         output = tf.concat([conv_out, clipped_reward, one_hot_last_action], axis=1)
+
         return output 
 
     # This is the LSTM that outputs the value function and the policy
@@ -138,11 +136,7 @@ class Agent(snt.RNNCore):
         new_action = tf.multinomial(policy_logits, num_samples=1,
                                     output_dtype=tf.int32)
 
-        # sess = tf.InteractiveSession()
-
         new_action = tf.squeeze(new_action, 1, name='new_action')
-        # tf.print(new_action, [new_action], message="this is after squeezing")
-
 
         return AgentOutput(new_action, policy_logits, baseline)
 
@@ -155,7 +149,7 @@ class Agent(snt.RNNCore):
         # print("squeezed (_build): ", squeezed)
         return squeezed, core_state
 
-    # Just need sto know if the episode has ended. 
+    # Just needs to know if the episode has ended. 
     # This is used in build by 
     @snt.reuse_variables
     def unroll(self, actions, env_outputs, core_state):
@@ -223,12 +217,7 @@ def build_actor(agent, env, level_name, action_set):
     # Convert action index to the native action.
     action = agent_output[0][0]
     # Changed from 
-    # action = tf.Print(agent_output[0][0], [agent_output[0][0]], "Action is: ")
     raw_action = action
-
-    # raw_action = tf.Print(tf.shape(raw_action), [tf.shape(raw_action)], "Raw action shape is: ")
-
-
     env_output, env_state = env.step(raw_action, env_state)
 
     return env_state, env_output, agent_state, agent_output
