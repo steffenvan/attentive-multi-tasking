@@ -10,8 +10,6 @@ import functools
 import os
 import sys
 
-# from loss_utility import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
-# import dmlab30
 import utilities_atari
 from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 import environments
@@ -47,7 +45,6 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
                   'Job name. Ignored when task is set to -1.')
 
 # Atari environments
-
 flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
 
@@ -73,7 +70,6 @@ def create_atari_environment(env_id, seed, is_test=False):
   environment = environments.FlowEnvironment(env_proxy.proxy)
   return environment
 
-
 @contextlib.contextmanager
 def pin_global_variables(device):
   """Pins global variables to the specified device."""
@@ -92,8 +88,6 @@ def pin_global_variables(device):
 
 def train(level_names):
   """Train."""
-
-  
   if is_single_machine():
     local_job_device = ''
     shared_job_device = ''
@@ -224,7 +218,6 @@ def train(level_names):
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
-    env_counter += 1
     # logdir = os.path.join(FLAGS.logdir, level_names)
     with tf.train.MonitoredTrainingSession(
         server.target,
@@ -356,13 +349,16 @@ def test(action_set, level_names):
 
 
 ATARI_MAPPING = collections.OrderedDict([
-    ('Pong-v0', 'Pong-v0'),
-    ('Breakout-v0', 'Breakout-v0'),
-    # ('SpaceInvaders-v0', 'SpaceInvaders-v0')
+  ('BeamRider-v0', 'BeamRider-v0'),
+  ('Breakout-v0', 'Breakout-v0'),
+  ('Pong-v0', 'Pong-v0'),
+  ('Qbert-v0', 'Qbert-v0'), 
+  ('Seaquest-v0', 'Seaquest-v0'),
+  ('SpaceInvaders-v0', 'SpaceInvaders-v0'),
 ])
 
 specific_action_set = {
-  "Beamrider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+  "BeamRider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
   "Breakout-v0":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
   "Pong-v0":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
   "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
@@ -387,5 +383,3 @@ def get_seed():
 if __name__ == '__main__':
     get_seed()
     tf.app.run()    
-
-

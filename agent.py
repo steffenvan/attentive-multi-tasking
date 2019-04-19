@@ -209,14 +209,12 @@ def build_actor(agent, env, level_name, action_set):
 
     # Run agent.
     action = agent_output[0]
-    # action = tf.Print(action.shape, [action], "Action is: ")
     batched_env_output = nest.map_structure(lambda t: tf.expand_dims(t, 0),
                                             env_output)
     agent_output, agent_state = agent((action, batched_env_output), agent_state)
 
     # Convert action index to the native action.
     action = agent_output[0][0]
-    # Changed from 
     raw_action = action
     env_output, env_state = env.step(raw_action, env_state)
 
