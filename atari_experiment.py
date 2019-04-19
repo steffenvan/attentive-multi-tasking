@@ -218,11 +218,11 @@ def train(level_names):
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
-    # logdir = os.path.join(FLAGS.logdir, level_names)
+    logdir = os.path.join(FLAGS.logdir, "multi-task")
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
-        checkpoint_dir=FLAGS.logdir,
+        checkpoint_dir=logdir,
         save_checkpoint_secs=600,
         save_summaries_secs=30,
         log_step_count_steps=50000,
@@ -273,7 +273,7 @@ def train(level_names):
 
           # Calculate total reward after last X frames
           if total_episode_frames % average_frames == 0:
-            with open("logging.txt", "a+") as f:
+            with open("multi-task-logging.txt", "a+") as f:
               f.write("Total frames:%d total_return: %f last %d frames\n" % (num_env_frames_v, total_episode_return, average_frames))
 
             # tf.logging.info('total return %f last %d frames', 
