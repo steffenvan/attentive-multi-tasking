@@ -230,9 +230,10 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
+        total_level_returns = {level_name: 0.0 for level_name in level_names}
         # TODO: COMMENT OUT SUMMARY WRITER IF NEEDED
         # summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
-
+        # total_level_returns = {l}
         # Prepare data for first run.
         session.run_step_fn(
             lambda step_context: step_context.session.run(stage_op))
@@ -242,7 +243,7 @@ def train(action_set, level_names):
         total_episode_frames = 0
         
         # Log the total return every *average_frames*.  
-        average_frames = 24000 
+        average_frames = 25000 
         total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
         #  print("(atari_experiment.py) num_env_frames: ", num_env_frames_v)
@@ -256,7 +257,8 @@ def train(action_set, level_names):
               infos_v.episode_step[done_v]):
             episode_frames = episode_step * FLAGS.num_action_repeats
 
-            total_episode_return += episode_return
+
+            # total_level_returns.update( )
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
             summary = tf.summary.Summary()
@@ -269,16 +271,8 @@ def train(action_set, level_names):
 
             level_returns[level_name].append(episode_return)
 
-          # Calculate total reward after last X frames
-          if total_episode_frames % average_frames == 0:
-            with open("multi-task-logging.txt", "a+") as f:
-              f.write("Total frames:%d total_return: %f last %d frames\n" % (num_env_frames_v, total_episode_return, average_frames))
-
             # tf.logging.info('total return %f last %d frames', 
             #                 total_episode_return, average_frames)
-            total_episode_return = 0 
-            total_episode_frames = 0
-
           current_episode_return_list = min(map(len, level_returns.values())) 
           if current_episode_return_list >= 1:
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
@@ -299,8 +293,21 @@ def train(action_set, level_names):
             # summary_writer.add_summary(summary, num_env_frames_v)
 
             # Clear level scores.
-            # TODO refactor 
+            # Add the episode returns before resetting for logging purposes. 
+            level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
+            for level_name in level_names:
+              total_level_returns[level_name] += level_returns[level_name]
+                      
             level_returns = {level_name: [] for level_name in level_names}
+
+          # Calculate total reward after last X frames
+          if total_episode_frames % average_frames == 0:
+            for level_name in level_names: 
+              with open(level_name + ".txt", "a+") as f:
+                f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
+              total_level_returns[level_name] = 0.0
+            total_episode_frames = 0
+
 
       else:
         # Execute actors (they just need to enqueue their output).
