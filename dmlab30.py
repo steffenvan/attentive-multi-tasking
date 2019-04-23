@@ -24,71 +24,41 @@ import numpy as np
 import tensorflow as tf
 
 
-# LEVEL_MAPPING = collections.OrderedDict([
-#     ('rooms_collect_good_objects_train', 'rooms_collect_good_objects_test'),
-#     ('rooms_exploit_deferred_effects_train',
-#      'rooms_exploit_deferred_effects_test'),
-#     ('rooms_select_nonmatching_object', 'rooms_select_nonmatching_object'),
-#     ('rooms_watermaze', 'rooms_watermaze'),
-#     ('rooms_keys_doors_puzzle', 'rooms_keys_doors_puzzle'),
-#     ('language_select_described_object', 'language_select_described_object'),
-#     ('language_select_located_object', 'language_select_located_object'),
-#     ('language_execute_random_task', 'language_execute_random_task'),
-#     ('language_answer_quantitative_question',
-#      'language_answer_quantitative_question'),
-#     ('lasertag_one_opponent_small', 'lasertag_one_opponent_small'),
-#     ('lasertag_three_opponents_small', 'lasertag_three_opponents_small'),
-#     ('lasertag_one_opponent_large', 'lasertag_one_opponent_large'),
-#     ('lasertag_three_opponents_large', 'lasertag_three_opponents_large'),
-#     ('natlab_fixed_large_map', 'natlab_fixed_large_map'),
-#     ('natlab_varying_map_regrowth', 'natlab_varying_map_regrowth'),
-#     ('natlab_varying_map_randomized', 'natlab_varying_map_randomized'),
-#     ('skymaze_irreversible_path_hard', 'skymaze_irreversible_path_hard'),
-#     ('skymaze_irreversible_path_varied', 'skymaze_irreversible_path_varied'),
-#     ('psychlab_arbitrary_visuomotor_mapping',
-#      'psychlab_arbitrary_visuomotor_mapping'),
-#     ('psychlab_continuous_recognition', 'psychlab_continuous_recognition'),
-#     ('psychlab_sequential_comparison', 'psychlab_sequential_comparison'),
-#     ('psychlab_visual_search', 'psychlab_visual_search'),
-#     ('explore_object_locations_small', 'explore_object_locations_small'),
-#     ('explore_object_locations_large', 'explore_object_locations_large'),
-#     ('explore_obstructed_goals_small', 'explore_obstructed_goals_small'),
-#     ('explore_obstructed_goals_large', 'explore_obstructed_goals_large'),
-#     ('explore_goal_locations_small', 'explore_goal_locations_small'),
-#     ('explore_goal_locations_large', 'explore_goal_locations_large'),
-#     ('explore_object_rewards_few', 'explore_object_rewards_few'),
-#     ('explore_object_rewards_many', 'explore_object_rewards_many'),
-# ])
-
-ATARI_GAMES = collections.OrderedDict([
-  # ('BeamRider-v0', 'BeamRider-v0'),
-  # ('Breakout-v0', 'Breakout-v0'),
-    ('Boxing-v0', 'Boxing-v0'),
-  # ('Pong-v0', 'Pong-v0'),
-  # ('Qbert-v0', 'Qbert-v0'), 
-  # ('Seaquest-v0', 'Seaquest-v0'),
-  # ('SpaceInvaders-v0', 'SpaceInvaders-v0'),
+LEVEL_MAPPING = collections.OrderedDict([
+    ('rooms_collect_good_objects_train', 'rooms_collect_good_objects_test'),
+    ('rooms_exploit_deferred_effects_train',
+     'rooms_exploit_deferred_effects_test'),
+    ('rooms_select_nonmatching_object', 'rooms_select_nonmatching_object'),
+    ('rooms_watermaze', 'rooms_watermaze'),
+    ('rooms_keys_doors_puzzle', 'rooms_keys_doors_puzzle'),
+    ('language_select_described_object', 'language_select_described_object'),
+    ('language_select_located_object', 'language_select_located_object'),
+    ('language_execute_random_task', 'language_execute_random_task'),
+    ('language_answer_quantitative_question',
+     'language_answer_quantitative_question'),
+    ('lasertag_one_opponent_small', 'lasertag_one_opponent_small'),
+    ('lasertag_three_opponents_small', 'lasertag_three_opponents_small'),
+    ('lasertag_one_opponent_large', 'lasertag_one_opponent_large'),
+    ('lasertag_three_opponents_large', 'lasertag_three_opponents_large'),
+    ('natlab_fixed_large_map', 'natlab_fixed_large_map'),
+    ('natlab_varying_map_regrowth', 'natlab_varying_map_regrowth'),
+    ('natlab_varying_map_randomized', 'natlab_varying_map_randomized'),
+    ('skymaze_irreversible_path_hard', 'skymaze_irreversible_path_hard'),
+    ('skymaze_irreversible_path_varied', 'skymaze_irreversible_path_varied'),
+    ('psychlab_arbitrary_visuomotor_mapping',
+     'psychlab_arbitrary_visuomotor_mapping'),
+    ('psychlab_continuous_recognition', 'psychlab_continuous_recognition'),
+    ('psychlab_sequential_comparison', 'psychlab_sequential_comparison'),
+    ('psychlab_visual_search', 'psychlab_visual_search'),
+    ('explore_object_locations_small', 'explore_object_locations_small'),
+    ('explore_object_locations_large', 'explore_object_locations_large'),
+    ('explore_obstructed_goals_small', 'explore_obstructed_goals_small'),
+    ('explore_obstructed_goals_large', 'explore_obstructed_goals_large'),
+    ('explore_goal_locations_small', 'explore_goal_locations_small'),
+    ('explore_goal_locations_large', 'explore_goal_locations_large'),
+    ('explore_object_rewards_few', 'explore_object_rewards_few'),
+    ('explore_object_rewards_many', 'explore_object_rewards_many'),
 ])
-
-HUMAN_SCORES_ATARI = {
-  # 'BeamRider-v0': 16926.5,
-  # 'Breakout-v0': 30.5,
-  'Boxing-v0': 6.0,
-  # 'Pong-v0': 14.6,
-  # 'Qbert-v0': 13455.0,
-  # 'Seaquest-v0': 42054.7,
-  # 'SpaceInvaders-v0': 1668.7,
-}
-
-RANDOM_SCORES_ATARI = {
-  # 'BeamRider-v0': 0.5,
-  # 'Breakout-v0': 1.0,
-    'Boxing-v0': 0.5,
-  # 'Pong-v0': 1.2,
-  # 'Qbert-v0': 232.0,
-  # 'Seaquest-v0': 101.0,
-  # 'SpaceInvaders-v0': 42.0,
-}
 
 HUMAN_SCORES = {
     'rooms_collect_good_objects_test': 10,
@@ -189,16 +159,6 @@ ALL_LEVELS = frozenset([
     'explore_goal_locations_large',
     'explore_object_rewards_few',
     'explore_object_rewards_many',
-])
-
-
-ALL_LEVELS_ATARI = frozenset([
-  'BeamRider-v0',
-  'Breakout-v0',
-  'Pong-v0',
-  'Qbert-v0',
-  'Seaquest-v0',
-  'SpaceInvaders-v0',
 ])
 
 def _transform_level_returns(level_returns):
