@@ -27,31 +27,31 @@ import tensorflow as tf
 ATARI_GAMES = collections.OrderedDict([
   ('BeamRider-v0', 'BeamRider-v0'),
   ('Breakout-v0', 'Breakout-v0'),
-    # ('Boxing-v0', 'Boxing-v0'),
   ('Pong-v0', 'Pong-v0'),
   ('Qbert-v0', 'Qbert-v0'), 
   ('Seaquest-v0', 'Seaquest-v0'),
   ('SpaceInvaders-v0', 'SpaceInvaders-v0'),
+    # ('Boxing-v0', 'Boxing-v0'),
 ])
 
 HUMAN_SCORES_ATARI = {
   'BeamRider-v0': 16926.5,
   'Breakout-v0': 30.5,
-  # 'Boxing-v0': 6.0,
   'Pong-v0': 14.6,
   'Qbert-v0': 13455.0,
   'Seaquest-v0': 42054.7,
   'SpaceInvaders-v0': 1668.7,
+  # 'Boxing-v0': 6.0,
 }
 
 RANDOM_SCORES_ATARI = {
   'BeamRider-v0': 0.5,
   'Breakout-v0': 1.0,
-    # 'Boxing-v0': 0.5,
   'Pong-v0': 1.2,
   'Qbert-v0': 232.0,
   'Seaquest-v0': 101.0,
   'SpaceInvaders-v0': 42.0,
+    # 'Boxing-v0': 0.5,
 }
 
 ALL_LEVELS_ATARI = frozenset([

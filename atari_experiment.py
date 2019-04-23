@@ -47,7 +47,7 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
 # Atari environments
 flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
-
+# flags.DEFINE_string('level_name', 'Pong-v0', 'specific atari game')
 # Structure to be sent from actors to learner.
 ActorOutput = collections.namedtuple(
     'ActorOutput', 'level_name agent_state env_outputs agent_outputs')
@@ -86,7 +86,7 @@ def pin_global_variables(device):
   with tf.variable_scope('', custom_getter=getter) as vs:
     yield vs
 
-def train(level_names):
+def train(action_set, level_names):
   """Train."""
   if is_single_machine():
     local_job_device = ''
@@ -118,14 +118,13 @@ def train(level_names):
     
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
-    current_action_set = specific_action_set[specific_atari_game]
-    agent = Agent(len(current_action_set))
+    # current_action_set = specific_action_set[specific_atari_game]
+    agent = Agent(len(action_set))
 
-    structure = build_actor(agent, env, specific_atari_game, current_action_set)
+    structure = build_actor(agent, env, specific_atari_game, action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
-
 
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/cpu'), \
@@ -135,7 +134,7 @@ def train(level_names):
     # Create Queue and Agent on the learner.
     with tf.device(shared_job_device):
       queue = tf.FIFOQueue(1, dtypes, shapes, shared_name='buffer')
-      agent = Agent(len(current_action_set))
+      agent = Agent(len(action_set))
 
       if is_single_machine() and 'dynamic_batching' in sys.modules:
         # For single machine training, we use dynamic batching for improved GPU
@@ -157,15 +156,14 @@ def train(level_names):
     for i in range(FLAGS.num_actors):
       if is_actor_fn(i):
         level_name = level_names[i % len(level_names)]
-        # level_name = "Breakout-v0"
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
         # Get the action set for the different atari games. 
-        current_action_set = specific_action_set[level_name]
-        tf.logging.info('Current game: {} with action set: {}'.format(level_name, current_action_set))
+        # current_action_set = specific_action_set[level_name]
+        tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
 
-        actor_output = build_actor(agent, env, level_name, current_action_set)
-        print("(atari_experiment.py) Length of current action set: ", len(current_action_set))
+        actor_output = build_actor(agent, env, level_name, action_set)
+        print("(atari_experiment.py) Length of current action set: ", len(action_set))
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -218,7 +216,7 @@ def train(level_names):
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
-    logdir = os.path.join(FLAGS.logdir, "multi-task")
+    logdir = os.path.join(FLAGS.logdir, level_name)
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
@@ -310,71 +308,53 @@ def train(level_names):
           print("ENQUEUE OPS: ", enqueue_ops)
           session.run(enqueue_ops)
 
-def test(action_set, level_names):
-  """Test."""
+# def test(level_names):
+#   """Test."""
+#   level_returns = {level_name: [] for level_name in level_names}
+#   with tf.Graph().as_default():
+#     outputs = {}
+#     agent = Agent(18)
+#     for level_name in level_names:
+#       current_action_set = specific_action_set[level_name]
+#       env = create_atari_environment(level_name, seed=1, is_test=True)
+#       outputs[level_name] = build_actor(agent, env, level_name, current_action_set)
+#     # TODO: Correct this to be able to handle all level names for each of their test run. 
+#     # Something like this
+#     #logdir = os.path.join(FLAGS.logdir, level_names[0])
+#     logdir = os.path.join(FLAGS.logdir, "multi-task")
+#     with tf.train.SingularMonitoredSession(
+#         checkpoint_dir=logdir,
+#         hooks=[py_process.PyProcessHook()]) as session:
+#       for level_name in level_names:
+#         tf.logging.info('Testing level: %s', level_name)
+#         while True:
+#           done_v, infos_v = session.run((
+#               outputs[level_name].env_outputs.done,
+#               outputs[level_name].env_outputs.info
+#           ))
+#           tf.logging.info("Return: {}".format(level_returns[level_name]))
+#           returns = level_returns[level_name]
+#           returns.extend(infos_v.episode_return[1:][done_v[1:]])
 
-  level_returns = {level_name: [] for level_name in level_names}
-  with tf.Graph().as_default():
-    agent = Agent(len(action_set))
-    outputs = {}
-    for level_name in level_names:
-      env = create_atari_environment(level_name, seed=1, is_test=True)
-      outputs[level_name] = build_actor(agent, env, level_name, action_set)
-    # TODO: Correct this to be able to handle all level names for each of their test run. 
-    # Something like this
-    #logdir = os.path.join(FLAGS.logdir, level_names[0])
-    with tf.train.SingularMonitoredSession(
-        checkpoint_dir=FLAGS.logdir,
-        hooks=[py_process.PyProcessHook()]) as session:
-      for level_name in level_names:
-        tf.logging.info('Testing level: %s', level_name)
-        while True:
-          done_v, infos_v = session.run((
-              outputs[level_name].env_outputs.done,
-              outputs[level_name].env_outputs.info
-          ))
-          returns = level_returns[level_name]
-          returns.extend(infos_v.episode_return[1:][done_v[1:]])
-
-          if len(returns) >= FLAGS.test_num_episodes:
-            tf.logging.info('Mean episode return: %f', np.mean(returns))
-            break
-
-
-  no_cap = utilities_atari.compute_human_normalized_score(level_returns,
-                                                  per_level_cap=None)
-  cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
-                                                    per_level_cap=100)
-  tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
+#           if len(returns) >= FLAGS.test_num_episodes:
+#             tf.logging.info('Mean episode return: %f', np.mean(returns))
+#             break
 
 
-ATARI_MAPPING = collections.OrderedDict([
-  ('BeamRider-v0', 'BeamRider-v0'),
-  ('Breakout-v0', 'Breakout-v0'),
-  ('Pong-v0', 'Pong-v0'),
-  ('Qbert-v0', 'Qbert-v0'), 
-  ('Seaquest-v0', 'Seaquest-v0'),
-  ('SpaceInvaders-v0', 'SpaceInvaders-v0'),
-])
-
-specific_action_set = {
-  "BeamRider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-  "Breakout-v0":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
-  "Pong-v0":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-  "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
-  "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
-                          'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
-  "SpaceInvaders-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-}
+#   no_cap = utilities_atari.compute_human_normalized_score(level_returns,
+#                                                   per_level_cap=None)
+#   cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
+#                                                     per_level_cap=100)
+#   tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
 
 def main(_):
 
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
-      train(ATARI_MAPPING.keys()) 
-    else:
-      test(ATARI_MAPPING.keys())
+      train(action_set, utilities_atari.ATARI_GAMES.keys()) 
+    # else:
+    #   test(utilities_atari.ATARI_GAMES.keys())
 
 def get_seed():
   global seed 
