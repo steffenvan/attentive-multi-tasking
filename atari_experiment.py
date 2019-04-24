@@ -243,7 +243,7 @@ def train(action_set, level_names):
         total_episode_frames = 0
         
         # Log the total return every *average_frames*.  
-        average_frames = 25000 
+        average_frames = 24000 
         total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
         #  print("(atari_experiment.py) num_env_frames: ", num_env_frames_v)
