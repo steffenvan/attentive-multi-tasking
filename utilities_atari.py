@@ -23,35 +23,34 @@ import collections
 import numpy as np
 import tensorflow as tf
 
-
 ATARI_GAMES = collections.OrderedDict([
   ('BeamRider-v0', 'BeamRider-v0'),
-# ('Breakout-v0', 'Breakout-v0'),
-# ('Pong-v0', 'Pong-v0'),
-## ('Qbert-v0', 'Qbert-v0'), 
-#  ('Seaquest-v0', 'Seaquest-v0'),
-#  ('SpaceInvaders-v0', 'SpaceInvaders-v0'),
+  # ('Breakout-v0', 'Breakout-v0'),
+  # ('Pong-v0', 'Pong-v0'),
+  # ('Qbert-v0', 'Qbert-v0'), 
+  # ('Seaquest-v0', 'Seaquest-v0'),
+  # ('SpaceInvaders-v0', 'SpaceInvaders-v0'),
     # ('Boxing-v0', 'Boxing-v0'),
 ])
 
 HUMAN_SCORES_ATARI = {
   'BeamRider-v0': 16926.5,
-# 'Breakout-v0': 30.5,
- #'Pong-v0': 14.6,
- #'Qbert-v0': 13455.0,
- #'Seaquest-v0': 42054.7,
- #'SpaceInvaders-v0': 1668.7,
+  # 'Breakout-v0': 30.5,
+  # 'Pong-v0': 14.6,
+  # 'Qbert-v0': 13455.0,
+  # 'Seaquest-v0': 42054.7,
+  # 'SpaceInvaders-v0': 1668.7,
   # 'Boxing-v0': 6.0,
 }
 
 RANDOM_SCORES_ATARI = {
   'BeamRider-v0': 0.5,
- #'Breakout-v0': 1.0,
- #'Pong-v0': 1.2,
- #'Qbert-v0': 232.0,
- #'Seaquest-v0': 101.0,
- #'SpaceInvaders-v0': 42.0,
-    # 'Boxing-v0': 0.5,
+  # 'Breakout-v0': 1.0,
+  # 'Pong-v0': 1.2,
+  # 'Qbert-v0': 232.0,
+  # 'Seaquest-v0': 101.0,
+  # 'SpaceInvaders-v0': 42.0,
+  # 'Boxing-v0': 0.5,
 }
 
 ALL_LEVELS_ATARI = frozenset([
@@ -62,6 +61,18 @@ ALL_LEVELS_ATARI = frozenset([
  #'Seaquest-v0',
  #'SpaceInvaders-v0',
 ])
+
+
+# specific_action_set = {
+#   "BeamRider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+#   "Breakout-v0":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
+#   "Pong-v0":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+#   "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
+#   "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
+#                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
+#   "SpaceInvaders-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+# }
+
 
 def _transform_level_returns(level_returns):
   """Converts training level names to test level names."""
@@ -80,8 +91,6 @@ def _transform_level_returns(level_returns):
         raise ValueError('Missing returns for level: \'%s\': ' % level_name)
     else:
       tf.logging.info('Skipping level %s for calculation.', level_name)
-  
-  # print("(dmlab30.py) level returns: ", new_level_returns)
   return new_level_returns
 
 
@@ -108,20 +117,15 @@ def compute_human_normalized_score(level_returns, per_level_cap):
 
   def human_normalized_score(level_name, returns):
     score = np.mean(returns)
-    # Checks if we are in atari
-    if "v0" in level_name:
-      human = HUMAN_SCORES_ATARI[level_name]
-      # print("(dmlab30.py) human score: ", human)
-      random = RANDOM_SCORES_ATARI[level_name]
-      # print("(dmlab30.py) random score: ", random)
+    human = HUMAN_SCORES_ATARI[level_name]
+    random = RANDOM_SCORES_ATARI[level_name]
     human_normalized_score = (score - random) / (human - random) * 100
-    # print("(dmlab30.py) normalized score: ", human_normalized_score)
     if per_level_cap is not None:
       human_normalized_score = min(human_normalized_score, per_level_cap)
-      # print("(dmlab30.py) normalized score per level cap: ", human_normalized_score)
+
     return human_normalized_score
+
   new_score = [human_normalized_score(k, v) for k, v in new_level_returns.items()]
-  # print("(dmlab30.py) new score: ", new_score)
   return np.mean(new_score)
 
 
