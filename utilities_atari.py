@@ -50,16 +50,16 @@ RANDOM_SCORES_ATARI = {
   # 'Qbert-v0': 232.0,
   # 'Seaquest-v0': 101.0,
   # 'SpaceInvaders-v0': 42.0,
-    # 'Boxing-v0': 0.5,
+  # 'Boxing-v0': 0.5,
 }
 
 ALL_LEVELS_ATARI = frozenset([
   'BeamRider-v0',
-  'Breakout-v0',
-  'Pong-v0',
-  'Qbert-v0',
-  'Seaquest-v0',
-  'SpaceInvaders-v0',
+ #'Breakout-v0',
+ #'Pong-v0',
+ #'Qbert-v0',
+ #'Seaquest-v0',
+ #'SpaceInvaders-v0',
 ])
 
 
