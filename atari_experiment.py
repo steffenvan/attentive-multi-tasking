@@ -59,8 +59,8 @@ def is_single_machine():
 
 def create_atari_environment(env_id, seed, is_test=False):
   config = {
-      'width': 84,
-      'height': 84,
+      'width': FLAGS.width,
+      'height': FLAGS.height,
       'level': env_id,
       'logLevel': 'warn'
   }
