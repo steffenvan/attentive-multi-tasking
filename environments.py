@@ -141,12 +141,12 @@ StepOutputInfo = collections.namedtuple('StepOutputInfo',
 StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
 
-# ATARI WRAPPER
-# TODO: Still need to modify this to be follow the same setup as the paper. 
+
+ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
+
 class PyProcessAtari(object):
 
     def __init__(self, env_id, config, num_action_repeats, seed):
-
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id)
       self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
@@ -159,11 +159,15 @@ class PyProcessAtari(object):
       return self._env.render()
 
     def step(self, action):
-      obs, reward, is_done, _ = self._env.step(action)
+      # If the current action exceeds the range of the specific game's action set length -> NOOP
+      if action >= self._env.action_space.n:
+        obs, reward, is_done, _ = self._env.step(0)
+      else: 
+        obs, reward, is_done, _ = self._env.step(action)
       self._env.render()
       done = np.array(is_done)
       reward = np.float32(reward)
-      
+        
       if done:
         self._env.reset() 
 
@@ -261,6 +265,9 @@ class FlowEnvironment(object):
       # Make sure the previous step has been executed before running the next
       # step.
       with tf.control_dependencies([flow]):
+        # if action > self._env._action_space_n:
+        #   self._env.step(0)
+        # else:
         reward, done, observation = self._env.step(action)
 
       with tf.control_dependencies(nest.flatten(observation)):

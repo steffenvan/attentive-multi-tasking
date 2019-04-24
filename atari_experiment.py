@@ -10,8 +10,6 @@ import functools
 import os
 import sys
 
-# from loss_utility import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
-# import dmlab30
 import utilities_atari
 from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 import environments
@@ -47,10 +45,9 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
                   'Job name. Ignored when task is set to -1.')
 
 # Atari environments
-
 flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
-
+# flags.DEFINE_string('level_name', 'Pong-v0', 'specific atari game')
 # Structure to be sent from actors to learner.
 ActorOutput = collections.namedtuple(
     'ActorOutput', 'level_name agent_state env_outputs agent_outputs')
@@ -61,10 +58,9 @@ def is_single_machine():
     return FLAGS.task == -1
 
 def create_atari_environment(env_id, seed, is_test=False):
-#   print("Before env proxy")
   config = {
-      'width': 84,
-      'height': 84,
+      'width': FLAGS.width,
+      'height': FLAGS.height,
       'level': env_id,
       'logLevel': 'warn'
   }
@@ -73,7 +69,6 @@ def create_atari_environment(env_id, seed, is_test=False):
 
   environment = environments.FlowEnvironment(env_proxy.proxy)
   return environment
-
 
 @contextlib.contextmanager
 def pin_global_variables(device):
@@ -101,8 +96,6 @@ def train(action_set, level_names):
     global_variable_device = '/gpu'
     server = tf.train.Server.create_local_server()
     filters = []
-    # print("Type of atari data structure: ", type(level_names))
-    # print("Should be atari games: ", level_names[0])
   else:
     local_job_device = '/job:%s/task:%d' % (FLAGS.job_name, FLAGS.task)
     shared_job_device = '/job:learner/task:0'
@@ -123,14 +116,15 @@ def train(action_set, level_names):
   # Only used to find the actor output structure.
   with tf.Graph().as_default():
     
-    env = create_atari_environment(level_names[0], seed=1)
-
+    specific_atari_game = level_names[0]
+    env = create_atari_environment(specific_atari_game, seed=1)
+    # current_action_set = specific_action_set[specific_atari_game]
     agent = Agent(len(action_set))
-    structure = build_actor(agent, env, level_names[0], action_set)
+
+    structure = build_actor(agent, env, specific_atari_game, action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
-
 
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/cpu'), \
@@ -164,9 +158,12 @@ def train(action_set, level_names):
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
-        # TODO: Modify to atari environment
+        # Get the action set for the different atari games. 
+        # current_action_set = specific_action_set[level_name]
+        tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
+
         actor_output = build_actor(agent, env, level_name, action_set)
-        
+        print("(atari_experiment.py) Length of current action set: ", len(action_set))
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -174,6 +171,7 @@ def train(action_set, level_names):
     # If running in a single machine setup, run actors with QueueRunners
     # (separate threads).
     if is_learner and enqueue_ops:
+
       tf.train.add_queue_runner(tf.train.QueueRunner(queue, enqueue_ops))
 
     # Build learner.
@@ -218,10 +216,11 @@ def train(action_set, level_names):
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
+    logdir = os.path.join(FLAGS.logdir, level_name)
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
-        checkpoint_dir=FLAGS.logdir,
+        checkpoint_dir=logdir,
         save_checkpoint_secs=600,
         save_summaries_secs=30,
         log_step_count_steps=50000,
@@ -230,12 +229,11 @@ def train(action_set, level_names):
 
       if is_learner:
         # Logging.
-        # TODO: Modify this to be able to handle atari
-        # env_returns = {env_id: [] for env_id in env_ids}
         level_returns = {level_name: [] for level_name in level_names}
-        # COMMENT OUT SUMMARY WRITER IF NEEDED
+        total_level_returns = {level_name: 0.0 for level_name in level_names}
+        # TODO: COMMENT OUT SUMMARY WRITER IF NEEDED
         # summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
-
+        # total_level_returns = {l}
         # Prepare data for first run.
         session.run_step_fn(
             lambda step_context: step_context.session.run(stage_op))
@@ -243,8 +241,9 @@ def train(action_set, level_names):
         # Execute learning and track performance.
         num_env_frames_v = 0
         total_episode_frames = 0
-        average_frames = 24000
-        # TODO: Modify to Atari 
+        
+        # Log the total return every *average_frames*.  
+        average_frames = 25000 
         total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
         #  print("(atari_experiment.py) num_env_frames: ", num_env_frames_v)
@@ -258,7 +257,8 @@ def train(action_set, level_names):
               infos_v.episode_step[done_v]):
             episode_frames = episode_step * FLAGS.num_action_repeats
 
-            total_episode_return += episode_return
+
+            # total_level_returns.update( )
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
             summary = tf.summary.Summary()
@@ -271,16 +271,8 @@ def train(action_set, level_names):
 
             level_returns[level_name].append(episode_return)
 
-          # Calculate total reward after last X frames
-          if total_episode_frames % average_frames == 0:
-            with open("logging.txt", "a+") as f:
-              f.write("Total frames:%d total_return: %f last %d frames\n" % (num_env_frames_v, total_episode_return, average_frames))
-
             # tf.logging.info('total return %f last %d frames', 
             #                 total_episode_return, average_frames)
-            total_episode_return = 0 
-            total_episode_frames = 0
-
           current_episode_return_list = min(map(len, level_returns.values())) 
           if current_episode_return_list >= 1:
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
@@ -289,12 +281,9 @@ def train(action_set, level_names):
                                                              per_level_cap=100)
             if total_episode_frames % average_frames == 0:
               with open("multi-actors-output.txt", "a+") as f:
-                  # f.write("num env frames: %d\n" % num_env_frames_v)
                   f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
                   f.write("no cap: %f after %d frames\n" % (no_cap, num_env_frames_v))
                   f.write("cap 100: %f after %d frames\n" % (cap_100, num_env_frames_v))
-         #   print("(atari_experiment) No cap: ", no_cap)
-         #   print("(atari_experiment) cap 100: ", cap_100)
 
             summary = tf.summary.Summary()
             summary.value.add(
@@ -304,76 +293,75 @@ def train(action_set, level_names):
             # summary_writer.add_summary(summary, num_env_frames_v)
 
             # Clear level scores.
-            # TODO refactor 
+            # Add the episode returns before resetting for logging purposes. 
+            level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
+            for level_name in level_names:
+              total_level_returns[level_name] += level_returns[level_name]
+                      
             level_returns = {level_name: [] for level_name in level_names}
+
+          # Calculate total reward after last X frames
+          if total_episode_frames % average_frames == 0:
+            for level_name in level_names: 
+              with open(level_name + ".txt", "a+") as f:
+                f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
+              total_level_returns[level_name] = 0.0
+            total_episode_frames = 0
+
 
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
-
+          print("ENQUEUE OPS: ", enqueue_ops)
           session.run(enqueue_ops)
 
-def test(action_set, level_names):
-  """Test."""
+# def test(level_names):
+#   """Test."""
+#   level_returns = {level_name: [] for level_name in level_names}
+#   with tf.Graph().as_default():
+#     outputs = {}
+#     agent = Agent(18)
+#     for level_name in level_names:
+#       current_action_set = specific_action_set[level_name]
+#       env = create_atari_environment(level_name, seed=1, is_test=True)
+#       outputs[level_name] = build_actor(agent, env, level_name, current_action_set)
+#     # TODO: Correct this to be able to handle all level names for each of their test run. 
+#     # Something like this
+#     #logdir = os.path.join(FLAGS.logdir, level_names[0])
+#     logdir = os.path.join(FLAGS.logdir, "multi-task")
+#     with tf.train.SingularMonitoredSession(
+#         checkpoint_dir=logdir,
+#         hooks=[py_process.PyProcessHook()]) as session:
+#       for level_name in level_names:
+#         tf.logging.info('Testing level: %s', level_name)
+#         while True:
+#           done_v, infos_v = session.run((
+#               outputs[level_name].env_outputs.done,
+#               outputs[level_name].env_outputs.info
+#           ))
+#           tf.logging.info("Return: {}".format(level_returns[level_name]))
+#           returns = level_returns[level_name]
+#           returns.extend(infos_v.episode_return[1:][done_v[1:]])
 
-  level_returns = {level_name: [] for level_name in level_names}
-  with tf.Graph().as_default():
-    agent = Agent(len(action_set))
-    outputs = {}
-    for level_name in level_names:
-      env = create_atari_environment(level_name, seed=1, is_test=True)
-      outputs[level_name] = build_actor(agent, env, level_name, action_set)
-    # TODO: Correct this to be able to handle all level names for each of their test run. 
-    logdir = os.path.join(FLAGS.logdir, level_names[0])
-    with tf.train.SingularMonitoredSession(
-        checkpoint_dir=logdir,
-        hooks=[py_process.PyProcessHook()]) as session:
-      for level_name in level_names:
-        tf.logging.info('Testing level: %s', level_name)
-        while True:
-          done_v, infos_v = session.run((
-              outputs[level_name].env_outputs.done,
-              outputs[level_name].env_outputs.info
-          ))
-          returns = level_returns[level_name]
-          returns.extend(infos_v.episode_return[1:][done_v[1:]])
-
-          if len(returns) >= FLAGS.test_num_episodes:
-            tf.logging.info('Mean episode return: %f', np.mean(returns))
-            break
-
-
-  no_cap = utilities_atari.compute_human_normalized_score(level_returns,
-                                                  per_level_cap=None)
-  cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
-                                                    per_level_cap=100)
-  tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
+#           if len(returns) >= FLAGS.test_num_episodes:
+#             tf.logging.info('Mean episode return: %f', np.mean(returns))
+#             break
 
 
-ATARI_MAPPING = collections.OrderedDict([
-  ('Boxing-v0', 'Boxing-v0')
-    # ('Pong-v0', 'Pong-v0'),
-    # ('Breakout-v0', 'Breakout-v0'),
-    # ('Breakout-v0', 'Breakout-v0')
-])
-
-
-beam_rider_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE')
-breakout_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT')
-pong_action_values = ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-qbert_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN')
-seauqest_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
-                          'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
-spaceInvaders_action_values = ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-boxing_action_values = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
+#   no_cap = utilities_atari.compute_human_normalized_score(level_returns,
+#                                                   per_level_cap=None)
+#   cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
+#                                                     per_level_cap=100)
+#   tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
 
 def main(_):
+
     tf.logging.set_verbosity(tf.logging.INFO)
-    action_set = boxing_action_values
+    action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
-      train(action_set, ATARI_MAPPING.keys()) 
-    else:
-      test(action_set, ATARI_MAPPING.keys())
+      train(action_set, utilities_atari.ATARI_GAMES.keys()) 
+    # else:
+    #   test(utilities_atari.ATARI_GAMES.keys())
 
 def get_seed():
   global seed 
@@ -382,5 +370,3 @@ def get_seed():
 if __name__ == '__main__':
     get_seed()
     tf.app.run()    
-
-
