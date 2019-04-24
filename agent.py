@@ -308,7 +308,7 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
         target_policy_logits=learner_outputs.policy_logits,
         actions=agent_outputs.action,
         discounts=discounts,
-        rewards=rewards,
+        rewards=clipped_rewards,
         values=learner_outputs.baseline,
         bootstrap_value=bootstrap_value)
 
@@ -328,7 +328,11 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
                                             FLAGS.total_environment_frames, 0)
   optimizer = tf.train.RMSPropOptimizer(learning_rate, FLAGS.decay,
                                         FLAGS.momentum, FLAGS.epsilon)
-  train_op = optimizer.minimize(total_loss)
+
+  gradients, variables = zip(*optimizer.compute_gradients(total_loss))
+  gradients, _ = tf.clip_by_global_norm(gradients, 40.0)
+
+  train_op = optimizer.apply_gradients(zip(gradients, variables))
 
   # Merge updating the network and environment frames into a single tensor.
   with tf.control_dependencies([train_op]):
