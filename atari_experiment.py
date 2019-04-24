@@ -216,7 +216,7 @@ def train(action_set, level_names):
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
-    logdir = os.path.join(FLAGS.logdir, level_name)
+    logdir = os.path.join(FLAGS.logdir, "BeamRider")
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
