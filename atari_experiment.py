@@ -72,7 +72,7 @@ def create_atari_environment(env_id, seed, is_test=False):
   else: 
     env_proxy = py_process.PyProcess(environments.PyProcessAtari, 
                                     env_id, config, FLAGS.num_action_repeats, seed, is_test)
-                                    
+
   environment = environments.FlowEnvironment(env_proxy.proxy)
   return environment
 
@@ -169,7 +169,7 @@ def train(action_set, level_names):
         tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
 
         actor_output = build_actor(agent, env, level_name, action_set)
-        print("(atari_experiment.py) Length of current action set: ", len(action_set))
+        # print("(atari_experiment.py) Length of current action set: ", len(action_set))
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -356,10 +356,12 @@ def test(action_set, level_names):
               outputs[level_name].env_outputs.done,
               outputs[level_name].env_outputs.info
           ))
-          tf.logging.info("Return: {}".format(level_returns[level_name]))
+          # tf.logging.info("Return: {}".format(level_returns[level_name]))
           returns = level_returns[level_name]
           # print("Returns: ", infos_v.episode_return)
-          print("Done info: ", infos_v.episode_return[done_v])
+          # print("Done info: ", infos_v.episode_return[done_v])
+          if infos_v.episode_return[1:][done_v[1:]]: 
+            tf.logging.info("Return: {}".format(level_returns[level_name]))
           returns.extend(infos_v.episode_return[1:][done_v[1:]])
 
           if len(returns) >= FLAGS.test_num_episodes:
@@ -378,11 +380,9 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
-      train(action_set, utilities_atari.ATARI_GAMES.keys()) 
+      # train(action_set, utilities_atari.ATARI_GAMES.keys()) 
+      train(action_set, [FLAGS.level_name]) 
     else:
-      print("LEVEL NAME: ", FLAGS.level_name)
-      print("LEVEL_NAME2: ", utilities_atari.ATARI_GAMES.keys())
-      print("Type of level: ", type(utilities_atari.ATARI_GAMES.keys()))
       test(action_set, [FLAGS.level_name])
 
 def get_seed():
