@@ -104,7 +104,7 @@ class PyProcessDmLab(object):
   def step(self, action):
     reward = self._env.step(action, num_steps=self._num_action_repeats)
     done = np.array(not self._env.is_running()) 
-    print("BEfore numpy array: ", self._env.is_running())
+    # print("BEfore numpy array: ", self._env.is_running())
     # print("Done in dmlab environment): ", done)
     if done:
       self._reset()
@@ -168,13 +168,15 @@ class PyProcessAtari(object):
         obs, reward, is_done, _ = self._env.step(0)
       else: 
         obs, reward, is_done, _ = self._env.step(action)
-      self._env.render()
       done = np.array(is_done)
       reward = np.float32(reward)
         
       if done:
         self._env.reset() 
+        # print("DONE")
+        # print("REWARD: ", reward)
 
+      self._env.render()
       return reward, is_done, obs
 
     @staticmethod
