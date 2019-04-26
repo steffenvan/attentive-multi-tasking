@@ -32,6 +32,7 @@ flags.DEFINE_integer('batch_size', 1, 'Batch size for training.')
 flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
+flags.DEFINE_boolean('use_shallow_model', False, 'If true, use shallow model. Default is the deep model')
 
 # Loss settings.
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
@@ -59,28 +60,36 @@ class Agent(snt.RNNCore):
         init_state = self._core.zero_state(batch_size, tf.float32)
         return init_state
 
-    def _instruction(self, instruction):
-        splitted = tf.string_split(instruction)
-        dense = tf.sparse_tensor_to_dense(splitted, default_value='')
-        length = tf.reduce_sum(tf.to_int32(tf.not_equal(dense, '')), axis=1)
+    def deep_convolution(self, frame):
+        conv_out = frame
+        for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
+            # Downscale.
+            conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+            conv_out = tf.nn.pool(
+            conv_out,
+            window_shape=[3, 3],
+            pooling_type='MAX',
+            padding='SAME',
+            strides=[2, 2])
+            # Residual block(s).
+            for j in range(num_blocks):
+                with tf.variable_scope('residual_%d_%d' % (i, j)):
+                    block_input = conv_out
+                    conv_out = tf.nn.relu(conv_out)
+                    conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                    conv_out = tf.nn.relu(conv_out)
+                    conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                    conv_out += block_input
+        return conv_out
+    
+    def shallow_convolution(self, frame):
+        conv_out = frame
+        # Downscale.
+        conv_out = snt.Conv2D(16, 8, stride=4, padding='SAME')(conv_out)
+        conv_out = tf.nn.relu(conv_out)
+        conv_out = snt.Conv2D(32, 4, stride=2, padding="SAME")(conv_out)
+        return conv_out
 
-        # To int64 hash buckets. Small risk of having collisions. Alternatively, a
-        # vocabulary can be used.
-        num_hash_buckets = 1000
-        buckets = tf.string_to_hash_bucket_fast(dense, num_hash_buckets)
-        # Embed the instruction. Embedding size 20 seems to be enough.
-        embedding_size = 20
-        embedding = snt.Embed(num_hash_buckets, embedding_size)(buckets)
-
-        # Pad to make sure there is at least one output.
-        padding = tf.to_int32(tf.equal(tf.shape(embedding)[1], 0))
-        embedding = tf.pad(embedding, [[0, 0], [0, padding], [0, 0]])
-
-        core = tf.contrib.rnn.LSTMBlockCell(64, name='language_lstm')
-        output, _ = tf.nn.dynamic_rnn(core, embedding, length, dtype=tf.float32)
-
-        # Return last output.
-        return tf.reverse_sequence(output, length, seq_axis=1)[:, 0]
             
     def _torso(self, input_):
         last_action, env_output = input_
@@ -91,28 +100,13 @@ class Agent(snt.RNNCore):
         frame = tf.to_float(frame)
 
         frame /= 255
+        
         with tf.variable_scope('convnet'):
-            conv_out = frame
-            for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
-                # Downscale.
-                conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-                conv_out = tf.nn.pool(
-                    conv_out,
-                    window_shape=[3, 3],
-                    pooling_type='MAX',
-                    padding='SAME',
-                    strides=[2, 2])
-
-                # # Residual block(s).
-                # for j in range(num_blocks):
-                #     with tf.variable_scope('residual_%d_%d' % (i, j)):
-                #         block_input = conv_out
-                #         conv_out = tf.nn.relu(conv_out)
-                #         conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-                #         conv_out = tf.nn.relu(conv_out)
-                #         conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-                #         conv_out += block_input
-
+            if FLAGS.use_shallow_model: 
+                conv_out = self.shallow_convolution(frame)
+            else:
+                conv_out = self.deep_convolution(frame)
+            
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.BatchFlatten()(conv_out)
 

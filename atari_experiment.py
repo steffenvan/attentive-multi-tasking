@@ -9,7 +9,7 @@ import contextlib
 import functools
 import os
 import sys
-
+from more_itertools import one 
 import utilities_atari
 from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 import environments
@@ -38,6 +38,7 @@ flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 
 # Flags used for testing.
 flags.DEFINE_integer('test_num_episodes', 10, 'Number of episodes per level.')
+flags.DEFINE_string('level_name', 'BeamRider-v0', 'Atari game to test on')
 
 # Flags used for distributed training.
 flags.DEFINE_integer('task', -1, 'Task id. Use -1 for local training.')
@@ -62,10 +63,15 @@ def create_atari_environment(env_id, seed, is_test=False):
       'width': FLAGS.width,
       'height': FLAGS.height,
       'level': env_id,
-      'logLevel': 'warn'
+      'logLevel': 'warn',
   }
-  env_proxy = py_process.PyProcess(environments.PyProcessAtari, 
-                                   env_id, config, FLAGS.num_action_repeats, seed)
+
+  if is_test: 
+    env_proxy = py_process.PyProcess(environments.PyProcessAtari, 
+                                    env_id, config, FLAGS.num_action_repeats, seed, is_test=True)
+  else: 
+    env_proxy = py_process.PyProcess(environments.PyProcessAtari, 
+                                    env_id, config, FLAGS.num_action_repeats, seed, is_test)
 
   environment = environments.FlowEnvironment(env_proxy.proxy)
   return environment
@@ -163,7 +169,7 @@ def train(action_set, level_names):
         tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
 
         actor_output = build_actor(agent, env, level_name, action_set)
-        print("(atari_experiment.py) Length of current action set: ", len(action_set))
+        # print("(atari_experiment.py) Length of current action set: ", len(action_set))
         # print("Actor output is: ", actor_output)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -317,18 +323,28 @@ def train(action_set, level_names):
 
 def test(action_set, level_names):
   """Test."""
-  logdir = os.path.join("/tmp/agent", "BeamRider")
-  print("THIS IS LOGDIR: ", logdir)
-  level_returns = {level_name: [] for level_name in level_names}
+  # logdir = os.path.join("/tmp/agent", "BeamRider")
+  def is_single_game():
+    return len(level_names) < 2
+  # print("THIS IS LOGDIR: ", logdir)
+  if is_single_game():
+    level_name = one(level_names)
+    level_returns = {level_name: []}
+  else:
+    level_returns = {level_name: [] for level_name in level_names}
   with tf.Graph().as_default():
     outputs = {}
     agent = Agent(len(action_set))
-    for level_name in level_names:
+    if is_single_game():
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
-    # TODO: Correct this to be able to handle all level names for each of their test run. 
-    # Something like this
-    #logdir = os.path.join(FLAGS.logdir, level_names[0])
+    # TODO: For multiple agents at once 
+    else: 
+      for level_name in level_names:
+        env = create_atari_environment(level_name, seed=1, is_test=True)
+        outputs[level_name] = build_actor(agent, env, level_name, action_set)
+
+    logdir = os.path.join(FLAGS.logdir, level_name)
     # tf.logging.info("LOGDIR IS: {}".format(logdir))
     with tf.train.SingularMonitoredSession(
         checkpoint_dir=logdir,
@@ -340,8 +356,12 @@ def test(action_set, level_names):
               outputs[level_name].env_outputs.done,
               outputs[level_name].env_outputs.info
           ))
-          tf.logging.info("Return: {}".format(level_returns[level_name]))
+          # tf.logging.info("Return: {}".format(level_returns[level_name]))
           returns = level_returns[level_name]
+          # print("Returns: ", infos_v.episode_return)
+          # print("Done info: ", infos_v.episode_return[done_v])
+          if infos_v.episode_return[1:][done_v[1:]]: 
+            tf.logging.info("Return: {}".format(level_returns[level_name]))
           returns.extend(infos_v.episode_return[1:][done_v[1:]])
 
           if len(returns) >= FLAGS.test_num_episodes:
@@ -360,9 +380,10 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
-      train(action_set, utilities_atari.ATARI_GAMES.keys()) 
+      # train(action_set, utilities_atari.ATARI_GAMES.keys()) 
+      train(action_set, [FLAGS.level_name]) 
     else:
-      test(action_set, utilities_atari.ATARI_GAMES.values())
+      test(action_set, [FLAGS.level_name])
 
 def get_seed():
   global seed 
