@@ -146,10 +146,14 @@ ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'U
 
 class PyProcessAtari(object):
 
-    def __init__(self, env_id, config, num_action_repeats, seed):
+    def __init__(self, env_id, config, num_action_repeats, seed, is_test=False):
       self.num_action_repeats = num_action_repeats
       self._env = atari_wrappers.make_atari(env_id)
-      self._env = atari_wrappers.wrap_deepmind(self._env, frame_stack=True)
+      if is_test:
+        self._env = atari_wrappers.wrap_deepmind(self._env, clip_rewards=False, frame_stack=True)
+      else:
+        self._env = atari_wrappers.wrap_deepmind(self._env, clip_rewards=True, frame_stack=True)
+      
 
     def initial(self):
       initial_obs = self._env.reset()
@@ -167,6 +171,7 @@ class PyProcessAtari(object):
       self._env.render()
       done = np.array(is_done)
       reward = np.float32(reward)
+      print("REWARD IS: ", reward)
         
       if done:
         self._env.reset() 
