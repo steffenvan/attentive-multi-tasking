@@ -315,53 +315,54 @@ def train(action_set, level_names):
           print("ENQUEUE OPS: ", enqueue_ops)
           session.run(enqueue_ops)
 
-# def test(level_names):
-#   """Test."""
-#   level_returns = {level_name: [] for level_name in level_names}
-#   with tf.Graph().as_default():
-#     outputs = {}
-#     agent = Agent(18)
-#     for level_name in level_names:
-#       current_action_set = specific_action_set[level_name]
-#       env = create_atari_environment(level_name, seed=1, is_test=True)
-#       outputs[level_name] = build_actor(agent, env, level_name, current_action_set)
-#     # TODO: Correct this to be able to handle all level names for each of their test run. 
-#     # Something like this
-#     #logdir = os.path.join(FLAGS.logdir, level_names[0])
-#     logdir = os.path.join(FLAGS.logdir, "multi-task")
-#     with tf.train.SingularMonitoredSession(
-#         checkpoint_dir=logdir,
-#         hooks=[py_process.PyProcessHook()]) as session:
-#       for level_name in level_names:
-#         tf.logging.info('Testing level: %s', level_name)
-#         while True:
-#           done_v, infos_v = session.run((
-#               outputs[level_name].env_outputs.done,
-#               outputs[level_name].env_outputs.info
-#           ))
-#           tf.logging.info("Return: {}".format(level_returns[level_name]))
-#           returns = level_returns[level_name]
-#           returns.extend(infos_v.episode_return[1:][done_v[1:]])
+def test(action_set, level_names):
+  """Test."""
+  logdir = os.path.join("/tmp/agent", "BeamRider")
+  print("THIS IS LOGDIR: ", logdir)
+  level_returns = {level_name: [] for level_name in level_names}
+  with tf.Graph().as_default():
+    outputs = {}
+    agent = Agent(len(action_set))
+    for level_name in level_names:
+      env = create_atari_environment(level_name, seed=1, is_test=True)
+      outputs[level_name] = build_actor(agent, env, level_name, action_set)
+    # TODO: Correct this to be able to handle all level names for each of their test run. 
+    # Something like this
+    #logdir = os.path.join(FLAGS.logdir, level_names[0])
+    # tf.logging.info("LOGDIR IS: {}".format(logdir))
+    with tf.train.SingularMonitoredSession(
+        checkpoint_dir=logdir,
+        hooks=[py_process.PyProcessHook()]) as session:
+      for level_name in level_names:
+        tf.logging.info('Testing level: %s', level_name)
+        while True:
+          done_v, infos_v = session.run((
+              outputs[level_name].env_outputs.done,
+              outputs[level_name].env_outputs.info
+          ))
+          tf.logging.info("Return: {}".format(level_returns[level_name]))
+          returns = level_returns[level_name]
+          returns.extend(infos_v.episode_return[1:][done_v[1:]])
 
-#           if len(returns) >= FLAGS.test_num_episodes:
-#             tf.logging.info('Mean episode return: %f', np.mean(returns))
-#             break
+          if len(returns) >= FLAGS.test_num_episodes:
+            tf.logging.info('Mean episode return: %f', np.mean(returns))
+            break
 
 
-#   no_cap = utilities_atari.compute_human_normalized_score(level_returns,
-#                                                   per_level_cap=None)
-#   cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
-#                                                     per_level_cap=100)
-#   tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
+  no_cap = utilities_atari.compute_human_normalized_score(level_returns,
+                                                  per_level_cap=None)
+  cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
+                                                    per_level_cap=100)
+  tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
 
 def main(_):
-
+    print("LOGDIR IS: ", FLAGS.logdir)
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
       train(action_set, utilities_atari.ATARI_GAMES.keys()) 
-    # else:
-    #   test(utilities_atari.ATARI_GAMES.keys())
+    else:
+      test(action_set, utilities_atari.ATARI_GAMES.values())
 
 def get_seed():
   global seed 
