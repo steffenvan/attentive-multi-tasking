@@ -171,7 +171,6 @@ class PyProcessAtari(object):
       self._env.render()
       done = np.array(is_done)
       reward = np.float32(reward)
-      print("REWARD IS: ", reward)
         
       if done:
         self._env.reset() 
