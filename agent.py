@@ -103,7 +103,7 @@ class Agent(snt.RNNCore):
         
         with tf.variable_scope('convnet'):
             if FLAGS.use_shallow_model: 
-                conv_out = self.shallow_convolution(frame)
+                conv_out = self.shallow_convolution(frame)1
             else:
                 conv_out = self.deep_convolution(frame)
             
@@ -158,9 +158,9 @@ class Agent(snt.RNNCore):
         initial_core_state = self.initial_state(tf.shape(actions)[1])
         # self._core.zero_state(tf.shape(actions)[1], tf.float32)
         core_output_list = []
-        for input_, d in zip(tf.unstack(torso_outputs), tf.unstack(done)):
+        for input_, is_done in zip(tf.unstack(torso_outputs), tf.unstack(done)):
         # If the episode ended, the core state should be reset before the next.
-            core_state = nest.map_structure(functools.partial(tf.where, d),
+            core_state = nest.map_structure(functools.partial(tf.where, is_done),
                                             initial_core_state, core_state)
             core_output, core_state = self._core(input_, core_state)
             core_output_list.append(core_output)
