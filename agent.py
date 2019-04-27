@@ -103,7 +103,7 @@ class Agent(snt.RNNCore):
         
         with tf.variable_scope('convnet'):
             if FLAGS.use_shallow_model: 
-                conv_out = self.shallow_convolution(frame)1
+                conv_out = self.shallow_convolution(frame)
             else:
                 conv_out = self.deep_convolution(frame)
             
