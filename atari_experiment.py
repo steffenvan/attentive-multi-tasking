@@ -18,7 +18,8 @@ import py_process
 import sonnet as snt
 import tensorflow as tf
 import vtrace
-from agent import Agent, build_actor, build_learner
+# from agent import Agent, build_actor, build_learner
+from feed_forward_agent import FFAgent, build_actor, build_learner
 # import agent
 
 try:
@@ -125,7 +126,7 @@ def train(action_set, level_names):
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     # current_action_set = specific_action_set[specific_atari_game]
-    agent = Agent(len(action_set))
+    agent = FFAgent(len(action_set))
 
     structure = build_actor(agent, env, specific_atari_game, action_set)
     flattened_structure = nest.flatten(structure)
@@ -140,7 +141,7 @@ def train(action_set, level_names):
     # Create Queue and Agent on the learner.
     with tf.device(shared_job_device):
       queue = tf.FIFOQueue(1, dtypes, shapes, shared_name='buffer')
-      agent = Agent(len(action_set))
+      agent = FFAgent(len(action_set))
 
       if is_single_machine() and 'dynamic_batching' in sys.modules:
         # For single machine training, we use dynamic batching for improved GPU
@@ -212,17 +213,18 @@ def train(action_set, level_names):
             [t.dtype for t in flattened_output],
             [t.shape for t in flattened_output])
         stage_op = area.put(flattened_output)
+        # Returns an ActorOutput tuple -> (level name, agent_state, env_outputs, agent_output)
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
         # Unroll agent on sequence, create losses and update ops.
         output = build_learner(agent, data_from_actors.agent_state,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs)
-
+        
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
-    logdir = os.path.join(FLAGS.logdir, "BeamRider")
+    logdir = os.path.join(FLAGS.logdir, "Seaquest-v0")
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
@@ -334,7 +336,7 @@ def test(action_set, level_names):
     level_returns = {level_name: [] for level_name in level_names}
   with tf.Graph().as_default():
     outputs = {}
-    agent = Agent(len(action_set))
+    agent = FFAgent(len(action_set))
     if is_single_game():
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
@@ -376,7 +378,6 @@ def test(action_set, level_names):
   tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
 
 def main(_):
-    print("LOGDIR IS: ", FLAGS.logdir)
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = environments.ATARI_ACTION_SET
     if FLAGS.mode == 'train':
