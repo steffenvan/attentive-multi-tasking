@@ -54,7 +54,7 @@ class FFAgent(snt.nets.MLP):
         self._num_actions = num_actions
 
     def zero_state(self, batch_size):
-        init_state = tf.zeros([batch_size, 256], tf.float32)
+        init_state = tf.zeros([batch_size, 275], tf.float32)
 
         return tf.convert_to_tensor(init_state)
 
@@ -113,15 +113,14 @@ class FFAgent(snt.nets.MLP):
     def unroll(self, actions, env_outputs, initial_state):
         _, _, done, _ = env_outputs
         torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
-        print(torso_outputs)
         zeros = self.zero_state(tf.shape(actions)[1])
-        print(zeros)
         torso_output_list = []
-        for input_, is_done in enumerate(zip(tf.unstack(torso_outputs), tf.unstack(done))): 
-            # for j in range(len(ix)): 
-            # torso_output_list[j] = nest.map_structure(functools.partial(tf.where, is_done), zeros, torso_output_list[j]) 
+        for ix, (input_, is_done) in enumerate(zip(tf.unstack(torso_outputs), tf.unstack(done))): 
+            for j in range(ix):
+                torso_output_list[j] = nest.map_structure(functools.partial(tf.where, is_done), zeros, torso_output_list[j]) 
             torso_output = input_ 
             torso_output_list.append(torso_output)
+
 
         output = snt.BatchApply(self._head)(tf.stack(torso_outputs)), initial_state
 
