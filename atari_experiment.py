@@ -39,7 +39,7 @@ flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 
 # Flags used for testing.
 flags.DEFINE_integer('test_num_episodes', 10, 'Number of episodes per level.')
-flags.DEFINE_string('level_name', 'BeamRider-v0', 'Atari game to test on')
+# flags.DEFINE_list('level_name', ['BeamRider-v0', 'Breakout-v0', 'Pong-v0', 'Qbert-v0', 'Seaquest-v0', 'SpaceInvaders-v0'], 'Atari game to test on')
 
 # Flags used for distributed training.
 flags.DEFINE_integer('task', -1, 'Task id. Use -1 for local training.')
@@ -224,7 +224,7 @@ def train(action_set, level_names):
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
-    logdir = os.path.join(FLAGS.logdir, "Seaquest-v0")
+    logdir = os.path.join(FLAGS.logdir, "multi-task-test")
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
@@ -380,9 +380,10 @@ def test(action_set, level_names):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = environments.ATARI_ACTION_SET
+    atari_games = utilities_atari.ATARI_GAMES.keys()
     if FLAGS.mode == 'train':
       # train(action_set, utilities_atari.ATARI_GAMES.keys()) 
-      train(action_set, [FLAGS.level_name]) 
+      train(action_set, atari_games) 
     else:
       test(action_set, [FLAGS.level_name])
 
