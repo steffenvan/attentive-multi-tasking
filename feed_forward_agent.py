@@ -12,6 +12,7 @@ import functools
 import os
 import sys
 import vtrace
+import numpy as np
 from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
 nest = tf.contrib.framework.nest
@@ -51,7 +52,13 @@ flags.DEFINE_float('epsilon', .01, 'RMSProp epsilon.')
 class FFAgent(snt.nets.MLP):
     def __init__(self, num_actions):
         super(FFAgent, self).__init__(output_sizes=[256], name="feed_forward_agent")
-        self._num_actions = num_actions
+
+        self._num_actions  = num_actions
+        self._mean         = tf.get_variable("mean", shape=[256], dtype=tf.float32, initializer=tf.zeros_initializer())
+        self._mean_squared = tf.get_variable("mean_squared", shape=[256], dtype=tf.float32, initializer=tf.zeros_initializer())
+        self._std          = tf.get_variable("standard-deviation", dtype=tf.float32, initializer=tf.eye(256))
+        self._beta         = 3e-4
+
 
     def zero_state(self, batch_size):
         init_state = tf.zeros([batch_size, 275], tf.float32)
@@ -155,6 +162,20 @@ class FFAgent(snt.nets.MLP):
         conv_out = snt.Conv2D(32, 4, stride=2, padding="SAME")(conv_out)
         return conv_out
 
+    def update_moments(self, expected_return):
+        old_mean = self._mean
+        old_mean_squared = self._mean_squared
+        self._mean = (1 - self._beta) * old_mean + self._beta * expected_return     
+        self._mean_squared = (1 - self._beta) * old_mean + self._beta * tf.square(expected_return)
+
+        return old_mean, old_mean_squared
+
+    def compute_sigma(self):
+        sigma = tf.sqrt(self._mean_squared - tf.square(self._mean))
+        return sigma
+
+
+
 def build_actor(agent, env, level_name, action_set):
   """Builds the actor loop."""
   # Initial values.
@@ -256,7 +277,8 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.baseline[-1]
-
+  value_estimate_at_T = bootstrap_value
+ 
   # At this point, the environment outputs at time step `t` are the inputs that
   # lead to the learner_outputs at time step `t`. After the following shifting,
   # the actions in agent_outputs and learner_outputs at time step `t` is what
@@ -275,6 +297,7 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
 
   discounts = tf.to_float(~done) * FLAGS.discounting
 
+
   # Compute V-trace returns and weights.
   # Note, this is put on the CPU because it's faster than on GPU. It can be
   # improved further with XLA-compilation or with a custom TensorFlow operation.
@@ -287,6 +310,20 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
         rewards=clipped_rewards,
         values=learner_outputs.baseline,
         bootstrap_value=bootstrap_value)
+  # Computing values for adaptive normalization
+  sigma = agent.compute_sigma() 
+
+  normalized_output = agent_outputs.baseline
+  policy_gradient = learner_outputs.policy_logits
+  policy_value_estimate = learner_outputs.baseline 
+
+  normalized_baseline_gradient = ((value_estimate_at_T   - agent._mean) / sigma - normalized_output) * tf.stop_gradient(normalized_output)
+  normalized_policy_gradient   = ((policy_value_estimate - agent._mean) / sigma - normalized_output) * policy_gradient
+
+
+
+  old_mean, old_mean_squared = agent.update_moments()
+
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
