@@ -65,6 +65,35 @@ class FFAgent(snt.nets.MLP):
 
         return tf.convert_to_tensor(init_state)
 
+    def deep_convolution(self, conv_out):
+        for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
+            # Downscale.
+            conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+            conv_out = tf.nn.pool(
+            conv_out,
+            window_shape=[3, 3],
+            pooling_type='MAX',
+            padding='SAME',
+            strides=[2, 2])
+            # Residual block(s).
+            for j in range(num_blocks):
+                with tf.variable_scope('residual_%d_%d' % (i, j)):
+                    block_input = conv_out
+                    conv_out = tf.nn.relu(conv_out)
+                    conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                    conv_out = tf.nn.relu(conv_out)
+                    conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                    conv_out += block_input
+        return conv_out
+
+    def shallow_convolution(self, frame):
+        conv_out = frame
+        # Downscale.
+        conv_out = snt.Conv2D(16, 8, stride=4, padding='SAME')(conv_out)
+        conv_out = tf.nn.relu(conv_out)
+        conv_out = snt.Conv2D(32, 4, stride=2, padding="SAME")(conv_out)
+        return conv_out
+
     def _torso(self, input_):
         last_action, env_output = input_
         reward, _, _, frame = env_output
@@ -133,40 +162,11 @@ class FFAgent(snt.nets.MLP):
 
         return output
 
-    def deep_convolution(self, conv_out):
-        for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
-            # Downscale.
-            conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-            conv_out = tf.nn.pool(
-            conv_out,
-            window_shape=[3, 3],
-            pooling_type='MAX',
-            padding='SAME',
-            strides=[2, 2])
-            # Residual block(s).
-            for j in range(num_blocks):
-                with tf.variable_scope('residual_%d_%d' % (i, j)):
-                    block_input = conv_out
-                    conv_out = tf.nn.relu(conv_out)
-                    conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-                    conv_out = tf.nn.relu(conv_out)
-                    conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-                    conv_out += block_input
-        return conv_out
-
-    def shallow_convolution(self, frame):
-        conv_out = frame
-        # Downscale.
-        conv_out = snt.Conv2D(16, 8, stride=4, padding='SAME')(conv_out)
-        conv_out = tf.nn.relu(conv_out)
-        conv_out = snt.Conv2D(32, 4, stride=2, padding="SAME")(conv_out)
-        return conv_out
-
-    def update_moments(self, expected_return):
+    def update_moments(self, vtrace_corrected_return):
         old_mean = self._mean
         old_mean_squared = self._mean_squared
-        self._mean = (1 - self._beta) * old_mean + self._beta * expected_return     
-        self._mean_squared = (1 - self._beta) * old_mean + self._beta * tf.square(expected_return)
+        self._mean = (1 - self._beta) * old_mean + self._beta * vtrace_corrected_return     
+        self._mean_squared = (1 - self._beta) * old_mean + self._beta * tf.square(vtrace_corrected_return)
 
         return old_mean, old_mean_squared
 
@@ -273,11 +273,14 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
     A tuple of (done, infos, and environment frames) where
     the environment frames tensor causes an update.
   """
+#   def new_parameters(expected_return, mean, sigma, baseline, gradient):
+    #   weights = ((expected_return - mean) / sigma - baseline) * gradient
+    #   return weights
+
   learner_outputs, _ = agent.unroll(agent_outputs.action, env_outputs, agent_state)
 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.baseline[-1]
-  value_estimate_at_T = bootstrap_value
  
   # At this point, the environment outputs at time step `t` are the inputs that
   # lead to the learner_outputs at time step `t`. After the following shifting,
@@ -311,19 +314,33 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
         values=learner_outputs.baseline,
         bootstrap_value=bootstrap_value)
   # Computing values for adaptive normalization
-  sigma = agent.compute_sigma() 
 
-  normalized_output = agent_outputs.baseline
-  policy_gradient = learner_outputs.policy_logits
-  policy_value_estimate = learner_outputs.baseline 
-
-  normalized_baseline_gradient = ((value_estimate_at_T   - agent._mean) / sigma - normalized_output) * tf.stop_gradient(normalized_output)
-  normalized_policy_gradient   = ((policy_value_estimate - agent._mean) / sigma - normalized_output) * policy_gradient
+#   normalized_output = agent_outputs.baseline
 
 
+ 
 
-  old_mean, old_mean_squared = agent.update_moments()
+  value_estimate             = vtrace_returns.vs 
+  policy_estimate            = vtrace_returns.pg_advantages
+  old_mean, old_mean_squared = agent.update_moments(value_estimate)
+  sigma                      = agent.compute_sigma() 
+  print("SIGMA IS: ", sigma)
+  print("OLD MEAN IS: ", old_mean)
+  print("POLCY ESTIMATE: ", policy_estimate)
 
+
+  critic_loss = compute_baseline_loss(value_estimate - learner_outputs.baseline)
+
+  policy_loss = compute_policy_gradient_loss(
+      learner_outputs.policy_logits, agent_outputs.action,
+      vtrace_returns.pg_advantages)
+#   print("POLICY LOSS: ", policy_loss)
+  
+#   normalized_baseline_gradient = ((value_estimate - agent._mean) / sigma - normalized_output) * 
+#   normalized_policy_gradient   = ((policy_value_estimate - agent._mean) / sigma - normalized_output) * policy_gradient
+
+#   old_mean, old_mean_squared = agent.update_moments()
+#   with tf.variable_scope('li')
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
@@ -342,10 +359,20 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
   optimizer = tf.train.RMSPropOptimizer(learning_rate, FLAGS.decay,
                                         FLAGS.momentum, FLAGS.epsilon)
 
-  gradients, variables = zip(*optimizer.compute_gradients(total_loss))
-  gradients, _ = tf.clip_by_global_norm(gradients, 40.0)
+#   policy_gradient, policy_params = zip(*optimizer.compute_gradients(policy_loss))
+#   print("Policy gradient: ", policy_gradient)
+#   value_gradient, value_params = zip(*optimizer.compute_gradients(value_loss))
 
+  gradients, variables = zip(*optimizer.compute_gradients(total_loss))
+
+  gradients, _ = tf.clip_by_global_norm(gradients, 40.0)
   train_op = optimizer.apply_gradients(zip(gradients, variables))
+  
+
+  
+  policy_params = ((policy_estimate - old_mean) / sigma - bootstrap_value) * policy_loss
+
+
 
   # Merge updating the network and environment frames into a single tensor.
   with tf.control_dependencies([train_op]):
@@ -356,5 +383,12 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
   tf.summary.scalar('learning_rate', learning_rate)
   tf.summary.scalar('total_loss', total_loss)
   tf.summary.histogram('action', agent_outputs.action)
+  print("LEARNING RATE: ", done)
+  print("TOTAL LOSS: ", num_env_frames_and_train)
+  print("ACTION: ", infos)
+
+
 
   return done, infos, num_env_frames_and_train
+
+
