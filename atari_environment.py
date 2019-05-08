@@ -20,143 +20,52 @@ from __future__ import print_function
 
 import collections
 import os.path
-import atari_wrappers
+from atari_wrappers import wrap_deepmind, make_atari
 
 import numpy as np
 import tensorflow as tf
 
-import deepmind_lab
-
+import gym
 
 nest = tf.contrib.framework.nest
-
-
-class LocalLevelCache(object):
-  """Local level cache."""
-
-  def __init__(self, cache_dir='/tmp/level_cache'):
-    self._cache_dir = cache_dir
-    tf.gfile.MakeDirs(cache_dir)
-
-  def fetch(self, key, pk3_path):
-    path = os.path.join(self._cache_dir, key)
-    if tf.gfile.Exists(path):
-      tf.gfile.Copy(path, pk3_path, overwrite=True)
-      return True
-    return False
-
-  def write(self, key, pk3_path):
-    path = os.path.join(self._cache_dir, key)
-    if not tf.gfile.Exists(path):
-      tf.gfile.Copy(pk3_path, path)
-
-
-DEFAULT_ACTION_SET = (
-    (0, 0, 0, 1, 0, 0, 0),    # Forward
-    (0, 0, 0, -1, 0, 0, 0),   # Backward
-    (0, 0, -1, 0, 0, 0, 0),   # Strafe Left
-    (0, 0, 1, 0, 0, 0, 0),    # Strafe Right
-    (-20, 0, 0, 0, 0, 0, 0),  # Look Left
-    (20, 0, 0, 0, 0, 0, 0),   # Look Right
-    (-20, 0, 0, 1, 0, 0, 0),  # Look Left + Forward
-    (20, 0, 0, 1, 0, 0, 0),   # Look Right + Forward
-    (0, 0, 0, 0, 1, 0, 0),    # Fire.
-)
-
-
-class PyProcessDmLab(object):
-  """DeepMind Lab wrapper for PyProcess."""
-
-  def __init__(self, level, config, num_action_repeats, seed,
-               runfiles_path=None, level_cache=None):
-    self._num_action_repeats = num_action_repeats
-    self._random_state = np.random.RandomState(seed=seed)
-    if runfiles_path:
-      deepmind_lab.set_runfiles_path(runfiles_path)
-      # print("printing deepmind lab path: ", deepmind_lab.set_runfiles_path(runfiles_path))
-    config = {k: str(v) for k, v in config.iteritems()}
-    # print("This is config: ", config)
-    # print("config path: ", config)
-    self._observation_spec = ['RGB_INTERLEAVED', 'INSTR']
-    self._env = deepmind_lab.Lab(
-        level=level,
-        observations=self._observation_spec,
-        config=config,
-        level_cache=level_cache,
-    )
-
-  def _reset(self):
-    self._env.reset(seed=self._random_state.randint(0, 2 ** 31 - 1))
-
-  def _observation(self):
-    d = self._env.observations()
-    # print(d)
-    obs_list = [d[k] for k in self._observation_spec] 
-     # print("Length of this: ", len(obs_list[0]))
-    # print("obs lsit: ", obs_list[0].shape)
-    return obs_list
-
-  def initial(self):
-    self._reset()
-    obs = self._observation()
-    return obs
-
-  def step(self, action):
-    reward = self._env.step(action, num_steps=self._num_action_repeats)
-    done = np.array(not self._env.is_running()) 
-    # print("BEfore numpy array: ", self._env.is_running())
-    # print("Done in dmlab environment): ", done)
-    if done:
-      self._reset()
-    observation = self._observation()
-    reward = np.array(reward, dtype=np.float32)
-    return reward, done, observation
-
-  def close(self):
-    self._env.close()
-
-  @staticmethod
-  def _tensor_specs(method_name, unused_kwargs, constructor_kwargs):
-    """Returns a nest of `TensorSpec` with the method's output specification."""
-    width = constructor_kwargs['config'].get('width', 320)
-    height = constructor_kwargs['config'].get('height', 240)
-
-    observation_spec = [
-        tf.contrib.framework.TensorSpec([height, width, 3], tf.uint8),
-        tf.contrib.framework.TensorSpec([], tf.string),
-    ]
-
-    if method_name == 'initial':
-      return observation_spec
-    elif method_name == 'step':
-      return (
-          tf.contrib.framework.TensorSpec([], tf.float32),
-          tf.contrib.framework.TensorSpec([], tf.bool),
-          observation_spec,
-      )
-
 
 StepOutputInfo = collections.namedtuple('StepOutputInfo',
                                         'episode_return episode_step')
 StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
+ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
+                    'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
 
+# To convert the shape from (84, 84, 4) -> (4, 84, 84)
+class TransposeWrapper(gym.ObservationWrapper):
+  def observation(self, observation):
+    transposed_obs = np.transpose(np.array(observation), axes=(2, 0, 1))
+    return transposed_obs
 
-ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
+def create_env(env_id, episode_life=True, clip_rewards=False, frame_stack=True, scale=False):
+  env = make_atari(env_id)
+  env = wrap_deepmind(env, episode_life, clip_rewards, frame_stack, scale)
+  env = TransposeWrapper(env)
+  return env
+
+def get_observation_spec(env_id):
+  env = create_env(env_id)
+  obs_shape = env.observation_space.shape
+  return obs_shape
 
 class PyProcessAtari(object):
 
-    def __init__(self, env_id, config, num_action_repeats, seed, is_test=False):
-      self.num_action_repeats = num_action_repeats
-      self._env = atari_wrappers.make_atari(env_id)
-      if is_test:
-        self._env = atari_wrappers.wrap_deepmind(self._env, clip_rewards=False, frame_stack=True)
-      else:
-        self._env = atari_wrappers.wrap_deepmind(self._env, clip_rewards=True, frame_stack=True)
+    def __init__(self, env_id, config):
+      self._env = create_env(env_id)
       
+    def _reset(self):
+      return self._env.reset()
+    
+    def _transpose_obs(self, observation):
+      return observation.swapaxes(2, 0)
 
     def initial(self):
-      initial_obs = self._env.reset()
+      initial_obs = self._transpose_obs(self._reset())
       return initial_obs
     
     def render(self):
@@ -168,38 +77,35 @@ class PyProcessAtari(object):
         obs, reward, is_done, _ = self._env.step(0)
       else: 
         obs, reward, is_done, _ = self._env.step(action)
-
-      done = np.array(is_done)
-      reward = np.float32(reward)
         
-      if done:
-        self._env.reset() 
-        # print("DONE")
-        # print("REWARD: ", reward)
+      if is_done:
+        obs = self._env.reset() 
 
-#      self._env.render()
+      reward = np.float32(reward)
+      obs = self._transpose_obs(obs)
+
       return reward, is_done, obs
+
+    def close(self):
+      self._env.close()
 
     @staticmethod
     def _tensor_specs(method_name, unused_kwargs, constructor_kwargs):
       """Returns a nest of `TensorSpec` with the method's output specification."""
 
-      width = constructor_kwargs['config'].get('width', 210)
-      height = constructor_kwargs['config'].get('height', 160)
+      env_id = constructor_kwargs['env_id']
 
-      observation_spec = tf.contrib.framework.TensorSpec([height, width, 4], tf.uint8)
+      observation_spec = tf.contrib.framework.TensorSpec(get_observation_spec(env_id), tf.uint8)
 
       if method_name == 'initial':
-        # print("(environments.py) obs_specs are: ", observation_spec)
         return observation_spec
+
       elif method_name == 'step':
         return (
             tf.contrib.framework.TensorSpec([], tf.float32),
             tf.contrib.framework.TensorSpec([], tf.bool),
             observation_spec,
         )
-      elif method_name == 'render':
-        return observation_spec
 
 class FlowEnvironment(object):
   """An environment that returns a new state for every modifying method.
@@ -221,7 +127,6 @@ class FlowEnvironment(object):
         episode.
     """
     self._env = env
-
 
   def initial(self):
     """Returns the initial output and initial state.
@@ -272,9 +177,6 @@ class FlowEnvironment(object):
       # Make sure the previous step has been executed before running the next
       # step.
       with tf.control_dependencies([flow]):
-        # if action > self._env._action_space_n:
-        #   self._env.step(0)
-        # else:
         reward, done, observation = self._env.step(action)
 
       with tf.control_dependencies(nest.flatten(observation)):
