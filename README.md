@@ -1,33 +1,29 @@
 #Attentive multi-tasking
 
 ## Current status
-#### Boxing
-- Agent stabilizes after ~50 mio frames. 
-- Achieves 100 % in terms of median human normalised score. 
-#### Multi-task learning
 - Can now train the agent on multiple Atari games at once. 
-- Train the MT-setting on the CPU-cluster. There are only 32 CPU's, how to train on the 57 Atari games? 
-- Put the learner the GPU when it arrives (after Easter)
+- Proper implementation of the feed forward agent. 
+- Put the learner the GPU when it arrives (9th of May)
 
 ## TODO 
-- Add PopArt to the architecture (by 21st of April)
-- Add PNN to the architecture (by 25th of April).
+- Add PopArt to the architecture (by 12th of May)
+- Add PNN?
 
 ## Running the Code
 
 ### Prerequisites
 
-- [TensorFlow][tensorflow] >=1.9.0-dev20180530, the environment
-- [DeepMind Lab][deepmind_lab] (if you want to try the original implementation `experiment.py`).  
+- [TensorFlow][tensorflow] >=1.9.0
 - [DeepMind Sonnet][sonnet].
 - [Atari](http://gym.openai.com/) 
+- [DeepMind Lab][deepmind_lab] (if you want to try the original implementation `experiment.py`).  
 There is a [Dockerfile][dockerfile] that serves as a reference for the
 pre-requisites and commands needed to run the code.
 
 ### Single Machine Training on a Single Level
 
-#### Training on `Boxing-v0`. 
-Run the code on [Boxing](https://gym.openai.com/envs/Boxing-v0/)
+#### Training on `BreakoutNoFrameSkip-v4`. 
+Run the code on [Breakout](https://gym.openai.com/envs/Breakout-v0/)
 
 Adjust the number of actors (i.e. number of environments) and batch size to
 match the size of the machine it runs on. A single actor, including DeepMind
@@ -40,16 +36,16 @@ Use a multiplexer and execute the following commands in different windows.
 
 ```sh
 python atari_experiment.py --job_name=learner --task=0 --num_actors=30 \
-    --level_name=Boxing-v0 --batch_size=10 --entropy_cost=0.01 \
+    --level_name=BreakoutNoFrameSkip-v4 --batch_size=10 --entropy_cost=0.01 \
     --learning_rate=0.0006 \
-    --total_environment_frames=2000000000 --reward_clipping=soft_asymmetric
+    --total_environment_frames=2000000000 
 ```
 #### Actor(s)
 
 ```sh
 for i in $(seq 0 29); do
   python atari_experiment.py --job_name=actor --task=$i \
-      --num_actors=30 --level_name=Boxing-v0 &
+      --num_actors=30 &
 done;
 wait
 ```
@@ -57,15 +53,9 @@ wait
 Test it across 10 episodes using: 
 
 ```sh
-python atari_experiment.py --mode=test --level_name=Boxing-v0 \
+python atari_experiment.py --mode=test --level_name=BreakoutNoFrameSkip-v4 \
     --test_num_episodes=10
 ```
-
-Training on the specific *Atari* game. Across 10 runs with different seeds
-but identical hyperparameters, we observed between 45 and 50 capped human
-normalized training score with different seeds (`--seed=[seed]`). Test scores
-are usually an absolute of ~2% lower.
-
 
 This work is an extension to [IMPALA](https://arxiv.org/abs/1804.00168]) (Espeholt et al. 2018) and [IMPALA with PopArt](https://arxiv.org/abs/1809.04474) (Hessel et al. 2018) and their recent result with improving distributed deep reinforcement learning.  
 
