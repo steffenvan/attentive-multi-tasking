@@ -25,7 +25,7 @@ import os
 import sys
 
 import dmlab30
-import environments
+import dmlab_environment
 import numpy as np
 import py_process
 import sonnet as snt
@@ -434,9 +434,9 @@ def create_environment(level_name, seed, is_test=False):
     # Mixer seed for evalution, see
     # https://github.com/deepmind/lab/blob/master/docs/users/python_api.md
     config['mixerSeed'] = 0x600D5EED
-  p = py_process.PyProcess(environments.PyProcessDmLab, level_name, config,
+  p = py_process.PyProcess(dmlab_environment.PyProcessDmLab, level_name, config,
                            FLAGS.num_action_repeats, seed)
-  return environments.FlowEnvironment(p.proxy)
+  return dmlab_environment.FlowEnvironment(p.proxy)
 
 
 @contextlib.contextmanager
@@ -690,7 +690,7 @@ def test(action_set, level_names):
 def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
-  action_set = environments.DEFAULT_ACTION_SET
+  action_set = dmlab_environment.DEFAULT_ACTION_SET
   if FLAGS.level_name == 'dmlab30' and FLAGS.mode == 'train':
     level_names = dmlab30.LEVEL_MAPPING.keys()
   elif FLAGS.level_name == 'dmlab30' and FLAGS.mode == 'test':

@@ -24,53 +24,54 @@ import numpy as np
 import tensorflow as tf
 
 ATARI_GAMES = collections.OrderedDict([
-  ('BeamRider-v0', 'BeamRider-v0'),
-  # ('Breakout-v0', 'Breakout-v0'),
-  # ('Pong-v0', 'Pong-v0'),
-  # ('Qbert-v0', 'Qbert-v0'), 
-  # ('Seaquest-v0', 'Seaquest-v0'),
-  # ('SpaceInvaders-v0', 'SpaceInvaders-v0'),
-    # ('Boxing-v0', 'Boxing-v0'),
+  # ('BeamRiderNoFrameskip-v4', 'BeamRiderNoFrameskip-v4'),
+  ('BreakoutNoFrameskip-v4', 'BreakoutNoFrameskip-v4'),
+  # ('PongNoFrameskip-v4', 'PongNoFrameskip-v4'),
+  # ('QbertNoFrameskip-v4', 'QbertNoFrameskip-v4'), 
+  # ('SeaquestNoFrameskip-v4', 'SeaquestNoFrameskip-v4'),
+  # ('SpaceInvadersNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4'),
+    # ('BoxingNoFrameskip-v4', 'BoxingNoFrameskip-v4'),
 ])
 
 HUMAN_SCORES_ATARI = {
-  'BeamRider-v0': 16926.5,
-  # 'Breakout-v0': 30.5,
-  # 'Pong-v0': 14.6,
-  # 'Qbert-v0': 13455.0,
-  # 'Seaquest-v0': 42054.7,
-  # 'SpaceInvaders-v0': 1668.7,
-  # 'Boxing-v0': 6.0,
+  # 'BeamRiderNoFrameskip-v4': 16926.5,
+  'BreakoutNoFrameskip-v4': 30.5,
+  # 'PongNoFrameskip-v4': 14.6,
+  # 'QbertNoFrameskip-v4': 13455.0,
+  # 'SeaquestNoFrameskip-v4': 42054.7,
+  # 'SpaceInvadersNoFrameskip-v4': 1668.7,
+  # 'BoxingNoFrameskip-v4': 6.0,
 }
 
+
 RANDOM_SCORES_ATARI = {
-  'BeamRider-v0': 0.5,
-  # 'Breakout-v0': 1.0,
-  # 'Pong-v0': 1.2,
-  # 'Qbert-v0': 232.0,
-  # 'Seaquest-v0': 101.0,
-  # 'SpaceInvaders-v0': 42.0,
-  # 'Boxing-v0': 0.5,
+  # 'BeamRiderNoFrameskip-v4': 0.5,
+  'BreakoutNoFrameskip-v4': 1.0,
+  # 'PongNoFrameskip-v4': 1.2,
+  # 'QbertNoFrameskip-v4': 232.0,
+  # 'SeaquestNoFrameskip-v4': 101.0,
+  # 'SpaceInvadersNoFrameskip-v4': 42.0,
+  # 'BoxingNoFrameskip-v4': 0.5,
 }
 
 ALL_LEVELS_ATARI = frozenset([
-  'BeamRider-v0',
- #'Breakout-v0',
- #'Pong-v0',
- #'Qbert-v0',
- #'Seaquest-v0',
- #'SpaceInvaders-v0',
+ 'BeamRiderNoFrameskip-v4',
+ 'BreakoutNoFrameskip-v4',
+ 'PongNoFrameskip-v4',
+ 'QbertNoFrameskip-v4',
+ 'SeaquestNoFrameskip-v4',
+ 'SpaceInvadersNoFrameskip-v4',
 ])
 
 
 # specific_action_set = {
-#   "BeamRider-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-#   "Breakout-v0":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
-#   "Pong-v0":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-#   "Qbert-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
-#   "Seaquest-v0": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
+#   "BeamRiderNoFrameskip-v4": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+#   "BreakoutNoFrameskip-v4":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
+#   "PongNoFrameskip-v4":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
+#   "QbertNoFrameskip-v4": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
+#   "SeaquestNoFrameskip-v4": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
 #                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
-#   "SpaceInvaders-v0": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
+#   "SpaceInvadersNoFrameskip-v4": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
 # }
 
 
