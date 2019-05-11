@@ -61,9 +61,9 @@ class FeedForwardAgent(snt.AbstractModule):
         self._beta         = 0.0004
 
 
-    def initial_state(self, batch_size):
+    # def initial_state(self, batch_size):
 
-        return tf.constant(0, shape=[1, 2])
+    #     return tf.constant(0, shape=[1, 2])
 
     def _torso(self, input_):
         last_action, env_output = input_
@@ -107,22 +107,22 @@ class FeedForwardAgent(snt.AbstractModule):
 
         return AgentOutput(new_action, policy_logits, normalized_vf, denormalized_vf) 
 
-    def _build(self, input_, initial_state):
+    def _build(self, input_):
         action, env_output = input_
         actions, env_outputs = nest.map_structure(lambda t: tf.expand_dims(t, 0),
                                                 (action, env_output))
-        outputs, initial_state = self.unroll(actions, env_outputs, initial_state)
+        outputs = self.unroll(actions, env_outputs)
         squeezed = nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
-        return squeezed, initial_state
+        return squeezed
 
     @snt.reuse_variables
-    def unroll(self, actions, env_outputs, initial_state):
+    def unroll(self, actions, env_outputs):
         _, _, done, _ = env_outputs
         torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
         print("ENV: ", env_outputs)
-        print("SHAPE: ", tf.stack(torso_outputs))
-        # specific_env_head = functools.partial(self._head)
-        output = snt.BatchApply(self._head)(tf.stack(torso_outputs)), initial_state
+        print("NO STACK: ", torso_outputs)
+        print("STACK: ", tf.stack(torso_outputs))
+        output = snt.BatchApply(self._head)(tf.stack(torso_outputs))
         return output
     
     def update_moments(self, vs):
@@ -131,7 +131,7 @@ class FeedForwardAgent(snt.AbstractModule):
             n_mean = (1 - self._beta) * mean + self._beta * gvt
             n_mean_squared = (1 - self._beta) * mean_squared + self._beta * tf.square(gvt)
             return n_mean, n_mean_squared
-        print("VS: ", vs)
+
         new_mean, new_mean_squared = tf.foldl(update_step, vs, initializer=(self._mean, self._mean_squared))
         with tf.variable_scope("feed_forward_agent/batch_apply_1/baseline", reuse=True):
             weight = tf.get_variable("w")

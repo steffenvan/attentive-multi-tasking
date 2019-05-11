@@ -96,11 +96,12 @@ def build_actor(agent, env, level_name, action_set):
   """Builds the actor loop."""
   # Initial values.
   initial_env_output, initial_env_state = env.initial()
-  initial_agent_state = agent.initial_state(1)
+  # initial_agent_state = agent.initial_state(1)
 
   initial_action = tf.zeros([1], dtype=tf.int32)
-
-  dummy_agent_output, _ = agent((initial_action, nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output)), initial_agent_state)
+  print("AGENT: ", agent)
+  dummy_agent_output = agent((initial_action, nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output)))
+  print("DUMMY agent: ", dummy_agent_output)
   initial_agent_output = nest.map_structure(
       lambda t: tf.zeros(t.shape, t.dtype), dummy_agent_output)
 
@@ -113,30 +114,29 @@ def build_actor(agent, env, level_name, action_set):
       return tf.get_local_variable(t.op.name, initializer=t, use_resource=True)
 
   persistent_state = nest.map_structure(
-      create_state, (initial_env_state, initial_env_output, initial_agent_state,
-                     initial_agent_output))
+      create_state, (initial_env_state, initial_env_output, initial_agent_output))
 
   def step(input_, unused_i):
     """Steps through the agent and the environment."""
-    env_state, env_output, agent_state, agent_output = input_
+    env_state, env_output, agent_output = input_
 
     # Run agent.
     action = agent_output[0]
     batched_env_output = nest.map_structure(lambda t: tf.expand_dims(t, 0),
                                             env_output)
-    agent_output, agent_state = agent((action, batched_env_output), agent_state)
+    agent_output = agent((action, batched_env_output))
 
     # Convert action index to the native action.
     action = agent_output[0][0]
     raw_action = action
     env_output, env_state = env.step(raw_action, env_state)
 
-    return env_state, env_output, agent_state, agent_output
+    return env_state, env_output, agent_output
 
   # Run the unroll. `read_value()` is needed to make sure later usage will
   # return the first values and not a new snapshot of the variables.
   first_values = nest.map_structure(lambda v: v.read_value(), persistent_state)
-  _, first_env_output, first_agent_state, first_agent_output = first_values
+  _, first_env_output, first_agent_output = first_values
 
   # Use scan to apply `step` multiple times, therefore unrolling the agent
   # and environment interaction for `FLAGS.unroll_length`. `tf.scan` forwards
@@ -147,7 +147,7 @@ def build_actor(agent, env, level_name, action_set):
   # unroll. Note that the initial states and outputs (fed through `initializer`)
   # are not in `output` and will need to be added manually later.
   output = tf.scan(step, tf.range(FLAGS.unroll_length), first_values)
-  _, env_outputs, _, agent_outputs = output
+  _, env_outputs, agent_outputs = output
 
   # Update persistent state with the last output from the loop.
   assign_ops = nest.map_structure(lambda v, t: v.assign(t[-1]),
@@ -157,7 +157,7 @@ def build_actor(agent, env, level_name, action_set):
   # and outputs are stored in `persistent_state` (to initialize next unroll).
   with tf.control_dependencies(nest.flatten(assign_ops)):
     # Remove the batch dimension from the agent state/output.
-    first_agent_state = nest.map_structure(lambda t: t[0], first_agent_state)
+    # first_agent_state = nest.map_structure(lambda t: t[0], first_agent_state)
     first_agent_output = nest.map_structure(lambda t: t[0], first_agent_output)
     agent_outputs = nest.map_structure(lambda t: t[:, 0], agent_outputs)
 
@@ -167,19 +167,19 @@ def build_actor(agent, env, level_name, action_set):
         (first_agent_output, first_env_output), (agent_outputs, env_outputs))
 
     # Use the extra state information if it's the LSTM agent
-    if hasattr(initial_agent_state, 'c') and hasattr(initial_agent_state, 'h'):
-      output = ActorOutput(
-          level_name=level_name, agent_state=first_agent_state,
-          env_outputs=full_env_outputs, agent_outputs=full_agent_outputs)
-    else:
-      output = ActorOutputFeedForward(
-          level_name=level_name, 
-          env_outputs=full_env_outputs,
-          agent_outputs=full_agent_outputs)
+    # if hasattr(initial_agent_state, 'c') and hasattr(initial_agent_state, 'h'):
+    #   output = ActorOutput(
+    #       level_name=level_name, agent_state=first_agent_state,
+    #       env_outputs=full_env_outputs, agent_outputs=full_agent_outputs)
+    
+    output = ActorOutputFeedForward(
+        level_name=level_name, 
+        env_outputs=full_env_outputs,
+        agent_outputs=full_agent_outputs)
     # No backpropagation should be done here.
     return nest.map_structure(tf.stop_gradient, output)
 
-def build_learner(agent, agent_state, env_outputs, agent_outputs):
+def build_learner(agent, env_outputs, agent_outputs):
   """Builds the learner loop.
 
   Args:
@@ -195,8 +195,8 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
     A tuple of (done, infos, and environment frames) where
     the environment frames tensor causes an update.
   """
-  env_id = game_id[agent_outputs.level_name]
-  learner_outputs, _ = agent.unroll(agent_outputs.action, env_outputs, agent_state)
+  # env_id = game_id[agent_outputs.level_name]
+  learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.denormalized_vf[-1]
@@ -350,7 +350,6 @@ def train(action_set, level_names):
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     agent = Agent(len(action_set))
-    print("LENGTH: ", len(action_set))
 
     structure = build_actor(agent, env, specific_atari_game, action_set)
     flattened_structure = nest.flatten(structure)
@@ -439,10 +438,11 @@ def train(action_set, level_names):
         if hasattr(data_from_actors, 'agent_state'):
           agent_state = data_from_actors.agent_state
         else:
-          agent_state = agent.initial_state(1)
+          pass
+          # agent_state = agent.initial_state(1)
 
         # Unroll agent on sequence, create losses and update ops.
-        output = build_learner(agent, agent_state,
+        output = build_learner(agent,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs)
         
