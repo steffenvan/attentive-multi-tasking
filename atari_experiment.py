@@ -59,15 +59,16 @@ flags.DEFINE_integer('batch_size', 1, 'Batch size for training.')
 flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
-flags.DEFINE_string('level_name', 'BreakoutNoFrameskip-v4', 'level name')
+flags.DEFINE_string('level_name', 'SeaquestNoFrameskip-v4', 'level name')
+# flags.DEFINE_string('all_games', ['SeaquestNoFrameskip-v4', 'BreakoutNoFrameskip-v4'], 'all games')
 
 # Loss settings.
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
 flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
 flags.DEFINE_float('discounting', .99, 'Discounting factor.')
-flags.DEFINE_enum('reward_clipping', 'abs_one', ['abs_one', 'soft_asymmetric'],
-                  'Reward clipping.')
-flags.DEFINE_float('gradient_clipping', 40.0, 'Negative means no clipping')
+# flags.DEFINE_enum('reward_clipping', 'None', ['abs_one', 'soft_asymmetric'],
+#                   'Reward clipping.')
+flags.DEFINE_float('gradient_clipping', -40.0, 'Negative means no clipping')
 
 # Optimizer settings.
 flags.DEFINE_float('learning_rate', 0.0006, 'Learning rate.')
@@ -82,6 +83,11 @@ ActorOutput = collections.namedtuple(
 ActorOutputFeedForward = collections.namedtuple(
     'ActorOutputFeedForward', 'level_name env_outputs agent_outputs')
 
+
+game_id = {}
+games = utilities_atari.ATARI_GAMES
+for i, game in enumerate(games.keys()):
+  game_id[game] = i
 
 def is_single_machine():
     return FLAGS.task == -1
@@ -189,11 +195,11 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
     A tuple of (done, infos, and environment frames) where
     the environment frames tensor causes an update.
   """
-
+  env_id = game_id[agent_outputs.level_name]
   learner_outputs, _ = agent.unroll(agent_outputs.action, env_outputs, agent_state)
 
   # Use last baseline value (from the value function) to bootstrap.
-  bootstrap_value = learner_outputs.baseline[-1]
+  bootstrap_value = learner_outputs.denormalized_vf[-1]
  
   # At this point, the environment outputs at time step `t` are the inputs that
   # lead to the learner_outputs at time step `t`. After the following shifting,
@@ -204,12 +210,12 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
       lambda t: t[1:], env_outputs)
   learner_outputs = nest.map_structure(lambda t: t[:-1], learner_outputs)
 
-  if FLAGS.reward_clipping == 'abs_one':
-    clipped_rewards = tf.clip_by_value(rewards, -1, 1)
-  elif FLAGS.reward_clipping == 'soft_asymmetric':
-    squeezed = tf.tanh(rewards / 5.0)
-    # Negative rewards are given less weight than positive rewards.
-    clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
+  # if FLAGS.reward_clipping == 'abs_one':
+  #   clipped_rewards = tf.clip_by_value(rewards, -1, 1)
+  # elif FLAGS.reward_clipping == 'soft_asymmetric':
+  #   squeezed = tf.tanh(rewards / 5.0)
+  #   # Negative rewards are given less weight than positive rewards.
+  #   clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
 
   discounts = tf.to_float(~done) * FLAGS.discounting
 
@@ -223,17 +229,25 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
         target_policy_logits=learner_outputs.policy_logits,
         actions=agent_outputs.action,
         discounts=discounts,
-        rewards=clipped_rewards,
-        values=learner_outputs.baseline,
+        rewards=rewards,
+        values=learner_outputs.denormalized_vf,
+        normalized_values=learner_outputs.normalized_vf,
+        std=agent._std,
+        mean=agent._mean,
         bootstrap_value=bootstrap_value)
+
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
+  # agent.
+  normalized_vtrace = (vtrace_returns.vs - agent._mean) / agent._std
+  normalized_vtrace = tf.stop_gradient(normalized_vtrace)
   total_loss = compute_policy_gradient_loss(
       learner_outputs.policy_logits, agent_outputs.action,
       vtrace_returns.pg_advantages)
   total_loss += FLAGS.baseline_cost * compute_baseline_loss(
-      vtrace_returns.vs - learner_outputs.baseline)
+       normalized_vtrace - learner_outputs.normalized_vf)
+
   total_loss += FLAGS.entropy_cost * compute_entropy_loss(
       learner_outputs.policy_logits)
 
@@ -246,7 +260,7 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
   optimizer = tf.train.RMSPropOptimizer(learning_rate, FLAGS.decay,
                                         FLAGS.momentum, FLAGS.epsilon)
 
-
+  
   # Use reward clipping for atari games only 
   if FLAGS.gradient_clipping > 0.0:
     gradients, variables = zip(*optimizer.compute_gradients(total_loss))
@@ -265,7 +279,10 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs):
   tf.summary.scalar('total_loss', total_loss)
   tf.summary.histogram('action', agent_outputs.action)
 
-  return done, infos, num_env_frames_and_train
+  return (done, infos, num_env_frames_and_train) + agent.update_moments(vtrace_returns.vs)
+
+
+
 def create_atari_environment(env_id, seed, is_test=False):
 
   config = {
@@ -333,6 +350,7 @@ def train(action_set, level_names):
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     agent = Agent(len(action_set))
+    print("LENGTH: ", len(action_set))
 
     structure = build_actor(agent, env, specific_atari_game, action_set)
     flattened_structure = nest.flatten(structure)
@@ -463,8 +481,8 @@ def train(action_set, level_names):
         total_episode_return = 0.0
         commandos = (data_from_actors.level_name,) + output + (stage_op,)
         while num_env_frames_v < FLAGS.total_environment_frames:
-          level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
-              (data_from_actors.level_name,) + output + (stage_op,))
+          level_names_v, done_v, infos_v, num_env_frames_v, mean, _, std, _ = session.run(
+              (data_from_actors.level_name,) + output + (agent._std, ) + (stage_op,))
 
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
           total_episode_frames = num_env_frames_v
@@ -480,6 +498,7 @@ def train(action_set, level_names):
             # total_level_returns.update( )
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
+            tf.logging.info('mean: %f std: %f', mean, std)
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
@@ -587,7 +606,7 @@ def main(_):
     action_set = atari_environment.ATARI_ACTION_SET
 
     if FLAGS.mode == 'train':
-      train(action_set, [FLAGS.level_name]) 
+      train(action_set, utilities_atari.ATARI_GAMES.keys()) 
     else:
       test(action_set, [FLAGS.level_name])
 

@@ -60,6 +60,7 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
   """
   policy_logits = tf.convert_to_tensor(policy_logits, dtype=tf.float32)
   actions = tf.convert_to_tensor(actions, dtype=tf.int32)
+  # actions = tf.expand_dims(actions, axis=-1)
 
   policy_logits.shape.assert_has_rank(3)
   actions.shape.assert_has_rank(2)
@@ -70,7 +71,7 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
 
 def from_logits(
     behaviour_policy_logits, target_policy_logits, actions,
-    discounts, rewards, values, bootstrap_value,
+    discounts, rewards, values, normalized_values, std, mean, bootstrap_value,
     clip_rho_threshold=1.0, clip_pg_rho_threshold=1.0,
     name='vtrace_from_logits'):
   r"""V-trace for softmax policies.
@@ -131,6 +132,7 @@ def from_logits(
       target_policy_logits, dtype=tf.float32)
   actions = tf.convert_to_tensor(actions, dtype=tf.int32)
 
+
   # Make sure tensor ranks are as expected.
   # The rest will be checked by from_action_log_probs.
   behaviour_policy_logits.shape.assert_has_rank(3)
@@ -150,6 +152,9 @@ def from_logits(
         discounts=discounts,
         rewards=rewards,
         values=values,
+        normalized_values=normalized_values,
+        std=std,
+        mean=mean,
         bootstrap_value=bootstrap_value,
         clip_rho_threshold=clip_rho_threshold,
         clip_pg_rho_threshold=clip_pg_rho_threshold)
@@ -162,7 +167,7 @@ def from_logits(
 
 
 def from_importance_weights(
-    log_rhos, discounts, rewards, values, bootstrap_value,
+    log_rhos, discounts, rewards, values, normalized_values, std, mean, bootstrap_value,
     clip_rho_threshold=1.0, clip_pg_rho_threshold=1.0,
     name='vtrace_from_importance_weights'):
   r"""V-trace from log importance weights.
@@ -211,6 +216,7 @@ def from_importance_weights(
   discounts = tf.convert_to_tensor(discounts, dtype=tf.float32)
   rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
   values = tf.convert_to_tensor(values, dtype=tf.float32)
+  normalized_values = tf.convert_to_tensor(normalized_values, dtype=tf.float32)
   bootstrap_value = tf.convert_to_tensor(bootstrap_value, dtype=tf.float32)
   if clip_rho_threshold is not None:
     clip_rho_threshold = tf.convert_to_tensor(clip_rho_threshold,
@@ -279,7 +285,7 @@ def from_importance_weights(
     else:
       clipped_pg_rhos = rhos
     pg_advantages = (
-        clipped_pg_rhos * (rewards + discounts * vs_t_plus_1 - values))
+        clipped_pg_rhos * (((rewards + discounts * vs_t_plus_1) - mean) / std - normalized_values))
 
     # Make sure no gradients backpropagated through the returned values.
     return VTraceReturns(vs=tf.stop_gradient(vs),

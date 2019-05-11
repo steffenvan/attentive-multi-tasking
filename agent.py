@@ -13,11 +13,12 @@ import os
 import sys
 import vtrace
 import numpy as np
+import utilities_atari
 from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
 nest = tf.contrib.framework.nest
 AgentOutput = collections.namedtuple('AgentOutput',
-                                     'action policy_logits baseline')
+                                     'action policy_logits normalized_vf denormalized_vf')
 
 def res_net_convolution(frame):
     for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
@@ -51,17 +52,18 @@ def shallow_convolution(frame):
 class FeedForwardAgent(snt.AbstractModule):
     def __init__(self, num_actions):
         super(FeedForwardAgent, self).__init__(name="feed_forward_agent")
-
+        self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
+        # print(number_of_games)
         self._num_actions  = num_actions
-        self._mean         = tf.get_variable("mean", shape=[256], dtype=tf.float32, initializer=tf.zeros_initializer())
-        self._mean_squared = tf.get_variable("mean_squared", shape=[256], dtype=tf.float32, initializer=tf.zeros_initializer())
-        self._std          = tf.get_variable("standard-deviation", dtype=tf.float32, initializer=tf.eye(256))
-        self._beta         = 3e-4
+        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]))
+        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]))
+        self._std          = tf.sqrt(self._mean_squared - tf.square(self._mean))
+        self._beta         = 0.0004
 
 
     def initial_state(self, batch_size):
 
-        return tf.constant(0, shape=[1, 1])
+        return tf.constant(0, shape=[1, 2])
 
     def _torso(self, input_):
         last_action, env_output = input_
@@ -81,19 +83,21 @@ class FeedForwardAgent(snt.AbstractModule):
         conv_out = tf.nn.relu(conv_out)
 
         # Append clipped last reward and one hot last action.
-        clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
+        # clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
         one_hot_last_action = tf.one_hot(last_action, self._num_actions)
-        output = tf.concat([conv_out, clipped_reward, one_hot_last_action], axis=1)
+        reward = tf.expand_dims(reward, -1)
+        output = tf.concat([conv_out, reward, one_hot_last_action], axis=1)
         return output
 
     def _head(self, torso_output):
 
         policy_logits = snt.Linear(self._num_actions, name='policy_logits')(torso_output)
-
-        unormalized_baseline = snt.Linear(1, name='baseline')(torso_output)
-        baseline = tf.squeeze(unormalized_baseline, axis=-1)
-
-        # baseline = self._std * baseline + self._mean
+        # with tf.variable_scope("last_layer"):
+        linear = snt.Linear(self._number_of_games, name='baseline')
+        unormalized_baseline = linear(torso_output)
+        baseline = tf.squeeze(unormalized_baseline, axis=0)
+        normalized_vf = baseline
+        denormalized_vf = tf.stop_gradient(self._std) * baseline + tf.stop_gradient(self._mean)
 
         # Sample an action from the policy.
         new_action = tf.multinomial(policy_logits, num_samples=1,
@@ -101,7 +105,7 @@ class FeedForwardAgent(snt.AbstractModule):
 
         new_action = tf.squeeze(new_action, 1, name='new_action')
 
-        return AgentOutput(new_action, policy_logits, baseline)
+        return AgentOutput(new_action, policy_logits, normalized_vf, denormalized_vf) 
 
     def _build(self, input_, initial_state):
         action, env_output = input_
@@ -115,21 +119,33 @@ class FeedForwardAgent(snt.AbstractModule):
     def unroll(self, actions, env_outputs, initial_state):
         _, _, done, _ = env_outputs
         torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
+        print("ENV: ", env_outputs)
+        print("SHAPE: ", tf.stack(torso_outputs))
+        # specific_env_head = functools.partial(self._head)
         output = snt.BatchApply(self._head)(tf.stack(torso_outputs)), initial_state
         return output
+    
+    def update_moments(self, vs):
+        def update_step(mm, gvt):
+            mean, mean_squared = mm
+            n_mean = (1 - self._beta) * mean + self._beta * gvt
+            n_mean_squared = (1 - self._beta) * mean_squared + self._beta * tf.square(gvt)
+            return n_mean, n_mean_squared
+        print("VS: ", vs)
+        new_mean, new_mean_squared = tf.foldl(update_step, vs, initializer=(self._mean, self._mean_squared))
+        with tf.variable_scope("feed_forward_agent/batch_apply_1/baseline", reuse=True):
+            weight = tf.get_variable("w")
+            bias = tf.get_variable("b")
+            print(weight.name)
 
-    def update_moments(self, vtrace_corrected_return):
-        old_mean = self._mean
-        old_mean_squared = self._mean_squared
-        self._mean = (1 - self._beta) * old_mean + self._beta * vtrace_corrected_return     
-        self._mean_squared = (1 - self._beta) * old_mean + self._beta * tf.square(vtrace_corrected_return)
+        new_std = tf.sqrt(new_mean_squared - tf.square(new_mean)) 
+        new_weight = tf.assign(weight,  weight * self._std / new_std)
+        new_bias = tf.assign(bias, (self._std * bias + self._mean - new_mean) / new_std )
+        with tf.control_dependencies([new_weight, new_bias]):
+            new_mean = tf.assign(self._mean, new_mean)
+            new_mean_squared = tf.assign(self._mean_squared, new_mean_squared)
 
-        return old_mean, old_mean_squared
-
-    def compute_sigma(self):
-        sigma = tf.sqrt(self._mean_squared - tf.square(self._mean))
-        return sigma
-
+        return new_mean, new_mean_squared
 
 class LSTMAgent(snt.RNNCore):
 
