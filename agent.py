@@ -71,7 +71,7 @@ class FeedForwardAgent(snt.AbstractModule):
         last_action, env_output = input_
 
         reward, _, _, frame = env_output
-        
+
         # Convert to floats.
         frame = tf.to_float(frame)
         frame /= 255
@@ -94,10 +94,8 @@ class FeedForwardAgent(snt.AbstractModule):
 
         policy_logits = snt.Linear(self._num_actions, name='policy_logits')(torso_output)
         linear = snt.Linear(self._number_of_games, name='baseline')
-        unormalized_baseline = linear(torso_output)
-        baseline = tf.squeeze(unormalized_baseline, axis=-1)
-        normalized_vf = baseline
-        denormalized_vf = tf.stop_gradient(self._std) * baseline + tf.stop_gradient(self._mean)
+        normalized_vf = tf.squeeze(linear(torso_output), axis=-1)
+        denormalized_vf = tf.stop_gradient(self._std) * normalized_vf + tf.stop_gradient(self._mean)
 
         # Sample an action from the policy.
         new_action = tf.multinomial(policy_logits, num_samples=1,
@@ -129,12 +127,11 @@ class FeedForwardAgent(snt.AbstractModule):
             n_mean = (1 - self._beta) * mean + self._beta * gvt
             n_mean_squared = (1 - self._beta) * mean_squared + self._beta * tf.square(gvt)
             return n_mean, n_mean_squared
-        print("VS: ", vs)
+
         new_mean, new_mean_squared = tf.foldl(update_step, vs, initializer=(self._mean, self._mean_squared))
         with tf.variable_scope("feed_forward_agent/batch_apply_1/baseline", reuse=True):
             weight = tf.get_variable("w")
             bias = tf.get_variable("b")
-            print(weight.name)
 
         new_std = tf.sqrt(new_mean_squared - tf.square(new_mean)) 
         new_weight = tf.assign(weight,  weight * self._std / new_std)
