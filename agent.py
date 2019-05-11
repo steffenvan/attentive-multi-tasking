@@ -52,25 +52,26 @@ def shallow_convolution(frame):
 class FeedForwardAgent(snt.AbstractModule):
     def __init__(self, num_actions):
         super(FeedForwardAgent, self).__init__(name="feed_forward_agent")
-        self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
+        self._number_of_games = 1
         # print(number_of_games)
         self._num_actions  = num_actions
-        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]))
-        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]))
+        # self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]))
+        # self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]))
+        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.constant([0.0]))
+        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.constant([1.0]))
         self._std          = tf.sqrt(self._mean_squared - tf.square(self._mean))
         self._beta         = 0.0004
 
 
     def initial_state(self, batch_size):
 
-        return tf.constant(0, shape=[1, 2])
+        return tf.constant(0, shape=[1, 1])
 
     def _torso(self, input_):
         last_action, env_output = input_
 
         reward, _, _, frame = env_output
-        # print("Instruction is: ", instruction)
-
+        
         # Convert to floats.
         frame = tf.to_float(frame)
         frame /= 255
@@ -92,10 +93,9 @@ class FeedForwardAgent(snt.AbstractModule):
     def _head(self, torso_output):
 
         policy_logits = snt.Linear(self._num_actions, name='policy_logits')(torso_output)
-        # with tf.variable_scope("last_layer"):
         linear = snt.Linear(self._number_of_games, name='baseline')
         unormalized_baseline = linear(torso_output)
-        baseline = tf.squeeze(unormalized_baseline, axis=0)
+        baseline = tf.squeeze(unormalized_baseline, axis=-1)
         normalized_vf = baseline
         denormalized_vf = tf.stop_gradient(self._std) * baseline + tf.stop_gradient(self._mean)
 
@@ -119,8 +119,6 @@ class FeedForwardAgent(snt.AbstractModule):
     def unroll(self, actions, env_outputs, initial_state):
         _, _, done, _ = env_outputs
         torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
-        print("ENV: ", env_outputs)
-        print("SHAPE: ", tf.stack(torso_outputs))
         # specific_env_head = functools.partial(self._head)
         output = snt.BatchApply(self._head)(tf.stack(torso_outputs)), initial_state
         return output
