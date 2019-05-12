@@ -84,6 +84,7 @@ ActorOutputFeedForward = collections.namedtuple(
     'ActorOutputFeedForward', 'level_name env_outputs agent_outputs')
 
 
+# Used to map the level name -> number for indexation
 game_id = {}
 games = utilities_atari.ATARI_GAMES
 for i, game in enumerate(games.keys()):
@@ -99,11 +100,7 @@ def build_actor(agent, env, level_name, action_set):
   # initial_agent_state = agent.initial_state(1)
 
   initial_action = tf.zeros([1], dtype=tf.int32)
-  print("AGENT: ", agent)
-  print("initial env output: ", initial_env_output)
-  print("intitial env_state: ", initial_env_state)
   dummy_agent_output = agent((initial_action, nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output)))
-  print("DUMMY agent: ", dummy_agent_output)
   initial_agent_output = nest.map_structure(
       lambda t: tf.zeros(t.shape, t.dtype), dummy_agent_output)
 
@@ -168,6 +165,7 @@ def build_actor(agent, env, level_name, action_set):
         lambda first, rest: tf.concat([[first], rest], 0),
         (first_agent_output, first_env_output), (agent_outputs, env_outputs))
 
+    # Removed for now 
     # Use the extra state information if it's the LSTM agent
     # if hasattr(initial_agent_state, 'c') and hasattr(initial_agent_state, 'h'):
     #   output = ActorOutput(
@@ -181,7 +179,7 @@ def build_actor(agent, env, level_name, action_set):
     # No backpropagation should be done here.
     return nest.map_structure(tf.stop_gradient, output)
 
-def build_learner(agent, env_outputs, agent_outputs):
+def build_learner(agent, env_outputs, agent_outputs, env_id):
   """Builds the learner loop.
 
   Args:
@@ -197,9 +195,27 @@ def build_learner(agent, env_outputs, agent_outputs):
     A tuple of (done, infos, and environment frames) where
     the environment frames tensor causes an update.
   """
-  # env_id = game_id[agent_outputs.level_name]
-  learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
 
+  # Need to map the game name, e.g 'BreakoutNoFrameSkip-v4' to an integer.  
+  def get_single_game_info(_tuple):
+    single_env_id, game_info = _tuple
+    return game_info[single_env_id]
+
+  # Retrieve the specific games in the current batch. 
+  def get_batch_value(batch):
+    return tf.map_fn(get_single_game_info, (env_id, batch), dtype=tf.float32)
+
+  learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
+  denormalized_vf = learner_outputs.denormalized_vf
+  normalized_vf   = learner_outputs.normalized_vf
+
+  game_specific_denormalized_vf = tf.map_fn(get_batch_value, denormalized_vf, dtype=tf.float32)
+  game_specific_normalized_vf   = tf.map_fn(get_batch_value, normalized_vf, dtype=tf.float32)
+
+  # Ensure the learner separates the value functions for each game. 
+  # Like equation (10) in the Multi-task PopArt paper (Hessel et al., 2018). 
+  learner_outputs = learner_outputs._replace(denormalized_vf=game_specific_denormalized_vf,
+                                             normalized_vf=game_specific_normalized_vf) 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.denormalized_vf[-1]
  
@@ -220,8 +236,8 @@ def build_learner(agent, env_outputs, agent_outputs):
   #   clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
 
   discounts = tf.to_float(~done) * FLAGS.discounting
-
-
+  game_specific_mean = tf.gather(agent._mean, env_id)
+  game_specific_std = tf.gather(agent._std, env_id)
   # Compute V-trace returns and weights.
   # Note, this is put on the CPU because it's faster than on GPU. It can be
   # improved further with XLA-compilation or with a custom TensorFlow operation.
@@ -234,15 +250,14 @@ def build_learner(agent, env_outputs, agent_outputs):
         rewards=rewards,
         values=learner_outputs.denormalized_vf,
         normalized_values=learner_outputs.normalized_vf,
-        std=agent._std,
-        mean=agent._mean,
+        mean=game_specific_mean,
+        std=game_specific_std,
         bootstrap_value=bootstrap_value)
-
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
   # agent.
-  normalized_vtrace = (vtrace_returns.vs - agent._mean) / agent._std
+  normalized_vtrace = (vtrace_returns.vs - tf.gather(agent._mean, env_id)) / tf.gather(agent._std, env_id)
   normalized_vtrace = tf.stop_gradient(normalized_vtrace)
   total_loss = compute_policy_gradient_loss(
       learner_outputs.policy_logits, agent_outputs.action,
@@ -262,7 +277,6 @@ def build_learner(agent, env_outputs, agent_outputs):
   optimizer = tf.train.RMSPropOptimizer(learning_rate, FLAGS.decay,
                                         FLAGS.momentum, FLAGS.epsilon)
 
-  
   # Use reward clipping for atari games only 
   if FLAGS.gradient_clipping > 0.0:
     gradients, variables = zip(*optimizer.compute_gradients(total_loss))
@@ -281,7 +295,7 @@ def build_learner(agent, env_outputs, agent_outputs):
   tf.summary.scalar('total_loss', total_loss)
   tf.summary.histogram('action', agent_outputs.action)
 
-  return (done, infos, num_env_frames_and_train) + agent.update_moments(vtrace_returns.vs)
+  return (done, infos, num_env_frames_and_train) + agent.update_moments(vtrace_returns.vs, env_id)
 
 
 
@@ -348,7 +362,7 @@ def train(action_set, level_names):
   # Only used to find the actor output structure.
   Agent = agent_factory(FLAGS.agent_name)
   with tf.Graph().as_default():
-    
+    print("GAMES: ", level_names)
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     agent = Agent(len(action_set))
@@ -433,25 +447,29 @@ def train(action_set, level_names):
             [t.dtype for t in flattened_output],
             [t.shape for t in flattened_output])
         stage_op = area.put(flattened_output)
+
         # Returns an ActorOutput tuple -> (level name, agent_state, env_outputs, agent_output)
         data_from_actors = nest.pack_sequence_as(structure, area.get())
+
+
+        level_names_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32)
+        level_names_index = tf.reshape(level_names_index, [FLAGS.batch_size])
 
         # If LSTM agent, we use the hidden states
         if hasattr(data_from_actors, 'agent_state'):
           agent_state = data_from_actors.agent_state
-        else:
-          pass
-          # agent_state = agent.initial_state(1)
 
         # Unroll agent on sequence, create losses and update ops.
         output = build_learner(agent,
                                data_from_actors.env_outputs,
-                               data_from_actors.agent_outputs)
+                               data_from_actors.agent_outputs,
+                               level_names_index)
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
     logdir = os.path.join(FLAGS.logdir, "multi-task-test")
+    
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
@@ -496,18 +514,15 @@ def train(action_set, level_names):
 
             episode_frames = episode_step * FLAGS.num_action_repeats
 
-
-            # total_level_returns.update( )
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
-            tf.logging.info('mean: %f std: %f', mean, std)
+            print('mean: {} \n std: {}'.format(mean, std))
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
             summary.value.add(tag=level_name + '/episode_frames',
                               simple_value=episode_frames)
             summary_writer.add_summary(summary, num_env_frames_v)
-            # TODO: refactor better
 
             level_returns[level_name].append(episode_return)
 
@@ -541,12 +556,12 @@ def train(action_set, level_names):
             level_returns = {level_name: [] for level_name in level_names}
 
           # Calculate total reward after last X frames
-          if total_episode_frames % average_frames == 0:
-            for level_name in level_names: 
-              with open(level_name + ".txt", "a+") as f:
-                f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
-              total_level_returns[level_name] = 0.0
-            total_episode_frames = 0
+          # if total_episode_frames % average_frames == 0:
+          #   for level_name in level_names: 
+          #     with open(level_name + ".txt", "a+") as f:
+          #       f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
+          #     total_level_returns[level_name] = 0.0
+          #   total_episode_frames = 0
 
       else:
         # Execute actors (they just need to enqueue their output).

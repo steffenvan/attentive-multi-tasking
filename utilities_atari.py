@@ -24,35 +24,33 @@ import numpy as np
 import tensorflow as tf
 
 ATARI_GAMES = collections.OrderedDict([
-  # ('BeamRiderNoFrameskip-v4', 'BeamRiderNoFrameskip-v4'),
-  # ('BoxingNoFrameskip-v4', 'BoxingNoFrameskip-v4'),
+  ('BeamRiderNoFrameskip-v4', 'BeamRiderNoFrameskip-v4'),
   ('BreakoutNoFrameskip-v4', 'BreakoutNoFrameskip-v4'),
-  # ('PongNoFrameskip-v4', 'PongNoFrameskip-v4'),
-  # ('QbertNoFrameskip-v4', 'QbertNoFrameskip-v4'), 
+  ('PongNoFrameskip-v4', 'PongNoFrameskip-v4'),
+  ('QbertNoFrameskip-v4', 'QbertNoFrameskip-v4'), 
   ('SeaquestNoFrameskip-v4', 'SeaquestNoFrameskip-v4'),
-  # ('SpaceInvadersNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4'),
-    # ('BoxingNoFrameskip-v4', 'BoxingNoFrameskip-v4'),
+  ('SpaceInvadersNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4'),
+  # ('BoxingNoFrameskip-v4', 'BoxingNoFrameskip-v4'),
 ])
 
 HUMAN_SCORES_ATARI = {
-  # 'BeamRiderNoFrameskip-v4': 16926.5,
-  # 'BoxingNoFrameskip-v4': 96
+  'BeamRiderNoFrameskip-v4': 16926.5,
   'BreakoutNoFrameskip-v4': 30.5,
-  # 'PongNoFrameskip-v4': 14.6,
-  # 'QbertNoFrameskip-v4': 13455.0,
+  'PongNoFrameskip-v4': 14.6,
+  'QbertNoFrameskip-v4': 13455.0,
   'SeaquestNoFrameskip-v4': 42054.7,
-  # 'SpaceInvadersNoFrameskip-v4': 1668.7,
+  'SpaceInvadersNoFrameskip-v4': 1668.7,
   # 'BoxingNoFrameskip-v4': 6.0,
 }
 
 
 RANDOM_SCORES_ATARI = {
-  # 'BeamRiderNoFrameskip-v4': 0.5,
+  'BeamRiderNoFrameskip-v4': 0.5,
   'BreakoutNoFrameskip-v4': 1.0,
-  # 'PongNoFrameskip-v4': 1.2,
-  # 'QbertNoFrameskip-v4': 232.0,
+  'PongNoFrameskip-v4': 1.2,
+  'QbertNoFrameskip-v4': 232.0,
   'SeaquestNoFrameskip-v4': 500.0,
-  # 'SpaceInvadersNoFrameskip-v4': 42.0,
+  'SpaceInvadersNoFrameskip-v4': 42.0,
   # 'BoxingNoFrameskip-v4': 0.5,
 }
 

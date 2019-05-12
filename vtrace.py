@@ -71,7 +71,7 @@ def log_probs_from_logits_and_actions(policy_logits, actions):
 
 def from_logits(
     behaviour_policy_logits, target_policy_logits, actions,
-    discounts, rewards, values, normalized_values, std, mean, bootstrap_value,
+    discounts, rewards, values, normalized_values, mean, std, bootstrap_value,
     clip_rho_threshold=1.0, clip_pg_rho_threshold=1.0,
     name='vtrace_from_logits'):
   r"""V-trace for softmax policies.
@@ -153,8 +153,8 @@ def from_logits(
         rewards=rewards,
         values=values,
         normalized_values=normalized_values,
-        std=std,
         mean=mean,
+        std=std,
         bootstrap_value=bootstrap_value,
         clip_rho_threshold=clip_rho_threshold,
         clip_pg_rho_threshold=clip_pg_rho_threshold)
@@ -167,7 +167,7 @@ def from_logits(
 
 
 def from_importance_weights(
-    log_rhos, discounts, rewards, values, normalized_values, std, mean, bootstrap_value,
+    log_rhos, discounts, rewards, values, normalized_values, mean, std, bootstrap_value,
     clip_rho_threshold=1.0, clip_pg_rho_threshold=1.0,
     name='vtrace_from_importance_weights'):
   r"""V-trace from log importance weights.
