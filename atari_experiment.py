@@ -257,7 +257,7 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
   # agent.
-  normalized_vtrace = (vtrace_returns.vs - tf.gather(agent._mean, env_id)) / tf.gather(agent._std, env_id)
+  normalized_vtrace = (vtrace_returns.vs -game_specific_mean) / game_specific_std
   normalized_vtrace = tf.stop_gradient(normalized_vtrace)
   total_loss = compute_policy_gradient_loss(
       learner_outputs.policy_logits, agent_outputs.action,
@@ -295,7 +295,9 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
   tf.summary.scalar('total_loss', total_loss)
   tf.summary.histogram('action', agent_outputs.action)
 
-  return (done, infos, num_env_frames_and_train) + agent.update_moments(vtrace_returns.vs, env_id)
+  new_mean, new_mean_squared = agent.update_moments(vtrace_returns.vs, env_id)
+
+  return (done, infos, num_env_frames_and_train) + (new_mean, new_mean_squared)
 
 
 
@@ -499,7 +501,6 @@ def train(action_set, level_names):
         # Log the total return every *average_frames*.  
         average_frames = 24000 
         total_episode_return = 0.0
-        commandos = (data_from_actors.level_name,) + output + (stage_op,)
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, mean, _, std, _ = session.run(
               (data_from_actors.level_name,) + output + (agent._std, ) + (stage_op,))
@@ -621,9 +622,10 @@ def test(action_set, level_names):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = atari_environment.ATARI_ACTION_SET
-
+    all_games = utilities_atari.ATARI_GAMES.keys()
+    print("ALL GAMES: ", all_games)
     if FLAGS.mode == 'train':
-      train(action_set, utilities_atari.ATARI_GAMES.keys()) 
+      train(action_set, all_games) 
     else:
       test(action_set, [FLAGS.level_name])
 
