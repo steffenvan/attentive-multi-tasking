@@ -131,17 +131,17 @@ class FeedForwardAgent(snt.AbstractModule):
 
         def update_step(mm, _tuple):
             mean, mean_squared = mm
-            gvt, env_id = _tuple
-            env_id = tf.reshape(env_id, [1, 1])
+            gvt, specific_env_id = _tuple
+            specific_env_id = tf.reshape(specific_env_id, [1, 1])
 
             # According to equation (6) in (Hessel et al., 2018).
             # Matching the specific game with it's current vtrace corrected value estimate. 
-            first_moment   = tf.reshape((1 - self._beta) * tf.gather(mean, env_id) + self._beta * gvt, [1])
-            second_moment  = tf.reshape((1 - self._beta) * tf.gather(mean_squared, env_id) + self._beta * tf.square(gvt), [1])
+            first_moment   = tf.reshape((1 - self._beta) * tf.gather(mean, specific_env_id) + self._beta * gvt, [1])
+            second_moment  = tf.reshape((1 - self._beta) * tf.gather(mean_squared, specific_env_id) + self._beta * tf.square(gvt), [1])
 
             # Matching the moments to the specific environment, so we only update the statistics for the specific game. 
-            n_mean         = tf.tensor_scatter_update(mean, env_id, first_moment)
-            n_mean_squared = tf.tensor_scatter_update(mean_squared, env_id, second_moment)
+            n_mean         = tf.tensor_scatter_update(mean, specific_env_id, first_moment)
+            n_mean_squared = tf.tensor_scatter_update(mean_squared, specific_env_id, second_moment)
             return n_mean, n_mean_squared
 
         # The batch may contain different games, so we need to 
