@@ -5,6 +5,6 @@ batcher.so
 code-server/
 experiment(not real).py
 real_experiment.py
-test.txt
+*.txt
 test_atari.py
 DRL_2.0/
