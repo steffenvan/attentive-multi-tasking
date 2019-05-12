@@ -1,17 +1,17 @@
-#Attentive multi-tasking
+# Attentive multi-tasking
 
 ## Current status
-- Can now train the agent on multiple Atari games at once. 
+- *Now supports PopArt normalization in a multi-task environment*
 - Proper implementation of the feed forward agent. 
 - Put the learner the GPU when it arrives (9th of May)
 
+
 ## TODO 
-- Add PopArt to the architecture (by 12th of May)
 - Add PNN?
 
-## Running the Code
+## Running the agent
 
-### Prerequisites
+### Dependencies
 
 - [TensorFlow][tensorflow] >=1.9.0
 - [DeepMind Sonnet][sonnet].
@@ -29,14 +29,14 @@ Adjust the number of actors (i.e. number of environments) and batch size to
 match the size of the machine it runs on. A single actor, including DeepMind
 Lab, requires a few hundred MB of RAM.
 
-### To run it in a distributed setting 
-Use a multiplexer and execute the following commands in different windows. 
+### Run the agent in a distributed setting 
+Use a multiplexer to execute the following commands. 
 
 #### Learner (for Atari)
 
 ```sh
 python atari_experiment.py --job_name=learner --task=0 --num_actors=30 \
-    --level_name=BreakoutNoFrameSkip-v4 --batch_size=10 --entropy_cost=0.01 \
+    --level_name=BreakoutNoFrameSkip-v4 --batch_size=32 --entropy_cost=0.01 \
     --learning_rate=0.0006 \
     --total_environment_frames=2000000000 
 ```
