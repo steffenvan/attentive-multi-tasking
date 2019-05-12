@@ -26,7 +26,7 @@ import tensorflow as tf
 ATARI_GAMES = collections.OrderedDict([
   # ('BeamRiderNoFrameskip-v4', 'BeamRiderNoFrameskip-v4'),
   # ('BoxingNoFrameskip-v4', 'BoxingNoFrameskip-v4'),
-  # ('BreakoutNoFrameskip-v4', 'BreakoutNoFrameskip-v4'),
+  ('BreakoutNoFrameskip-v4', 'BreakoutNoFrameskip-v4'),
   # ('PongNoFrameskip-v4', 'PongNoFrameskip-v4'),
   # ('QbertNoFrameskip-v4', 'QbertNoFrameskip-v4'), 
   ('SeaquestNoFrameskip-v4', 'SeaquestNoFrameskip-v4'),
@@ -37,7 +37,7 @@ ATARI_GAMES = collections.OrderedDict([
 HUMAN_SCORES_ATARI = {
   # 'BeamRiderNoFrameskip-v4': 16926.5,
   # 'BoxingNoFrameskip-v4': 96
-  # 'BreakoutNoFrameskip-v4': 30.5,
+  'BreakoutNoFrameskip-v4': 30.5,
   # 'PongNoFrameskip-v4': 14.6,
   # 'QbertNoFrameskip-v4': 13455.0,
   'SeaquestNoFrameskip-v4': 42054.7,
@@ -48,7 +48,7 @@ HUMAN_SCORES_ATARI = {
 
 RANDOM_SCORES_ATARI = {
   # 'BeamRiderNoFrameskip-v4': 0.5,
-  # 'BreakoutNoFrameskip-v4': 1.0,
+  'BreakoutNoFrameskip-v4': 1.0,
   # 'PongNoFrameskip-v4': 1.2,
   # 'QbertNoFrameskip-v4': 232.0,
   'SeaquestNoFrameskip-v4': 500.0,

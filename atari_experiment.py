@@ -100,6 +100,8 @@ def build_actor(agent, env, level_name, action_set):
 
   initial_action = tf.zeros([1], dtype=tf.int32)
   print("AGENT: ", agent)
+  print("initial env output: ", initial_env_output)
+  print("intitial env_state: ", initial_env_state)
   dummy_agent_output = agent((initial_action, nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output)))
   print("DUMMY agent: ", dummy_agent_output)
   initial_agent_output = nest.map_structure(

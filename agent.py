@@ -53,17 +53,12 @@ class FeedForwardAgent(snt.AbstractModule):
     def __init__(self, num_actions):
         super(FeedForwardAgent, self).__init__(name="feed_forward_agent")
         self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
-        # print(number_of_games)
+        print(self._number_of_games)
         self._num_actions  = num_actions
         self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]))
         self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]))
         self._std          = tf.sqrt(self._mean_squared - tf.square(self._mean))
         self._beta         = 0.0004
-
-
-    # def initial_state(self, batch_size):
-
-    #     return tf.constant(0, shape=[1, 2])
 
     def _torso(self, input_):
         last_action, env_output = input_
@@ -94,8 +89,10 @@ class FeedForwardAgent(snt.AbstractModule):
         policy_logits = snt.Linear(self._num_actions, name='policy_logits')(torso_output)
         # with tf.variable_scope("last_layer"):
         linear = snt.Linear(self._number_of_games, name='baseline')
-        unormalized_baseline = linear(torso_output)
-        baseline = tf.squeeze(unormalized_baseline, axis=0)
+        last_linear_layer_vf = linear(torso_output)
+        print("last linear: ", last_linear_layer_vf)
+
+        baseline = nest.map_structure(lambda t: tf.squeeze(t, 0), last_linear_layer_vf)
         normalized_vf = baseline
         denormalized_vf = tf.stop_gradient(self._std) * baseline + tf.stop_gradient(self._mean)
 
@@ -117,12 +114,16 @@ class FeedForwardAgent(snt.AbstractModule):
 
     @snt.reuse_variables
     def unroll(self, actions, env_outputs):
-        _, _, done, _ = env_outputs
+        reward, info, done, obs = env_outputs
         torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
-        print("ENV: ", env_outputs)
+        # print("ENV: ", env_outputs)
+        print("reward: ", reward)
+        print("info: ", info)
+        print("obs: ", obs)
         print("NO STACK: ", torso_outputs)
         print("STACK: ", tf.stack(torso_outputs))
         output = snt.BatchApply(self._head)(tf.stack(torso_outputs))
+        print("After outputs")
         return output
     
     def update_moments(self, vs):
