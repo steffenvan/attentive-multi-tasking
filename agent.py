@@ -54,10 +54,10 @@ class FeedForwardAgent(snt.AbstractModule):
         super(FeedForwardAgent, self).__init__(name="feed_forward_agent")
         self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
         self._num_actions  = num_actions
-        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.constant([0.0]))
-        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.constant([1.0]))
+        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]))
+        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]))
         self._std          = tf.sqrt(self._mean_squared - tf.square(self._mean))
-        self._beta         = 3e-4
+        self._beta         = 0.0004
 
     def _torso(self, input_):
         last_action, env_output = input_
@@ -165,7 +165,6 @@ class FeedForwardAgent(snt.AbstractModule):
 
         return new_mean, new_mean_squared
 
-# TODO: fix the PopArt normalization for the LSTM agent. 
 class LSTMAgent(snt.RNNCore):
 
     def __init__(self, num_actions):
