@@ -52,24 +52,15 @@ def shallow_convolution(frame):
 class FeedForwardAgent(snt.AbstractModule):
     def __init__(self, num_actions):
         super(FeedForwardAgent, self).__init__(name="feed_forward_agent")
-        self._number_of_games = 1
-        # print(number_of_games)
+        self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
         self._num_actions  = num_actions
-        # self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]))
-        # self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]))
         self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.constant([0.0]))
         self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.constant([1.0]))
         self._std          = tf.sqrt(self._mean_squared - tf.square(self._mean))
-        self._beta         = 0.0004
-
-
-    def initial_state(self, batch_size):
-
-        return tf.constant(0, shape=[1, 1])
+        self._beta         = 3e-4
 
     def _torso(self, input_):
         last_action, env_output = input_
-
         reward, _, _, frame = env_output
 
         # Convert to floats.
@@ -83,7 +74,6 @@ class FeedForwardAgent(snt.AbstractModule):
         conv_out = snt.Linear(256)(conv_out)
         conv_out = tf.nn.relu(conv_out)
 
-        # Append clipped last reward and one hot last action.
         # clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
         one_hot_last_action = tf.one_hot(last_action, self._num_actions)
         reward = tf.expand_dims(reward, -1)
@@ -94,54 +84,88 @@ class FeedForwardAgent(snt.AbstractModule):
 
         policy_logits = snt.Linear(self._num_actions, name='policy_logits')(torso_output)
         linear = snt.Linear(self._number_of_games, name='baseline')
-        normalized_vf = tf.squeeze(linear(torso_output), axis=-1)
+        last_linear_layer_vf = linear(torso_output)
+
+        normalized_vf = last_linear_layer_vf
         denormalized_vf = tf.stop_gradient(self._std) * normalized_vf + tf.stop_gradient(self._mean)
 
         # Sample an action from the policy.
         new_action = tf.multinomial(policy_logits, num_samples=1,
                                     output_dtype=tf.int32)
-
-        new_action = tf.squeeze(new_action, 1, name='new_action')
+        new_action = tf.squeeze(new_action, [1], name='new_action')
 
         return AgentOutput(new_action, policy_logits, normalized_vf, denormalized_vf) 
 
-    def _build(self, input_, initial_state):
+    def _build(self, input_):
         action, env_output = input_
         actions, env_outputs = nest.map_structure(lambda t: tf.expand_dims(t, 0),
                                                 (action, env_output))
-        outputs, initial_state = self.unroll(actions, env_outputs, initial_state)
+        outputs = self.unroll(actions, env_outputs)
         squeezed = nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
-        return squeezed, initial_state
+        return squeezed
 
     @snt.reuse_variables
-    def unroll(self, actions, env_outputs, initial_state):
-        _, _, done, _ = env_outputs
+    def unroll(self, actions, env_outputs):
+        # _, _, done, _ = env_outputs
         torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
-        # specific_env_head = functools.partial(self._head)
-        output = snt.BatchApply(self._head)(tf.stack(torso_outputs)), initial_state
+        output = snt.BatchApply(self._head, name='batch_apply_unroll')(tf.stack(torso_outputs))
         return output
     
-    def update_moments(self, vs):
-        def update_step(mm, gvt):
-            mean, mean_squared = mm
-            n_mean = (1 - self._beta) * mean + self._beta * gvt
-            n_mean_squared = (1 - self._beta) * mean_squared + self._beta * tf.square(gvt)
-            return n_mean, n_mean_squared
+    def update_moments(self, vs, env_id):
+        """
+        This function computes the normalization statistics for the actor and critic updates, and 
+        updates the statistics according to the Multi-task PopArt paper (Hessel et al., 2018). 
+        https://arxiv.org/abs/1809.04474
 
-        new_mean, new_mean_squared = tf.foldl(update_step, vs, initializer=(self._mean, self._mean_squared))
-        with tf.variable_scope("feed_forward_agent/batch_apply_1/baseline", reuse=True):
+        Args: 
+            vs:     Vtrace corrected value estimates. 
+            env_id: single game id. Used to pair the value function and specific game. 
+
+        Returns:
+            A tuple of the updated first and second moments according to equation (6) 
+            in (Hessel et al., 2018)
+        """
+        with tf.variable_scope("feed_forward_agent/batch_apply_unroll/baseline", reuse=True):
             weight = tf.get_variable("w")
             bias = tf.get_variable("b")
 
+        def update_step(mm, _tuple):
+            mean, mean_squared = mm
+            gvt, env_id = _tuple
+            env_id = tf.reshape(env_id, [1, 1])
+
+            # According to equation (6) in (Hessel et al., 2018).
+            # Matching the specific game with it's current vtrace corrected value estimate. 
+            first_moment   = tf.reshape((1 - self._beta) * tf.gather(mean, env_id) + self._beta * gvt, [1])
+            second_moment  = tf.reshape((1 - self._beta) * tf.gather(mean_squared, env_id) + self._beta * tf.square(gvt), [1])
+
+            # Matching the moments to the specific environment, so we only update the statistics for the specific game. 
+            n_mean         = tf.tensor_scatter_update(mean, env_id, first_moment)
+            n_mean_squared = tf.tensor_scatter_update(mean_squared, env_id, second_moment)
+            return n_mean, n_mean_squared
+
+        # The batch may contain different games, so we need to 
+        # ensure that the vtrace corrected value estimate matches the current game. 
+        def update_batch(mm, gvt):
+            return tf.foldl(update_step, (gvt, env_id), initializer=mm)
+
+        new_mean, new_mean_squared = tf.foldl(update_batch, vs, initializer=(self._mean, self._mean_squared))
         new_std = tf.sqrt(new_mean_squared - tf.square(new_mean)) 
-        new_weight = tf.assign(weight,  weight * self._std / new_std)
-        new_bias = tf.assign(bias, (self._std * bias + self._mean - new_mean) / new_std )
+
+        # According to equation (9) in Multi-task PopArt paper
+        weight_update = weight * self._std / new_std
+        bias_update   = (self._std * bias + self._mean - new_mean) / new_std 
+        
+        # And here we perform the Preserving outputs precisely (Pop) updates. 
+        new_weight = tf.assign(weight, weight_update)
+        new_bias = tf.assign(bias, bias_update)
         with tf.control_dependencies([new_weight, new_bias]):
             new_mean = tf.assign(self._mean, new_mean)
             new_mean_squared = tf.assign(self._mean_squared, new_mean_squared)
 
         return new_mean, new_mean_squared
 
+# TODO: fix the PopArt normalization for the LSTM agent. 
 class LSTMAgent(snt.RNNCore):
 
     def __init__(self, num_actions):
@@ -158,7 +182,6 @@ class LSTMAgent(snt.RNNCore):
     def _torso(self, input_):
         last_action, env_output = input_
         reward, _, _, frame = env_output
-        # print("Instruction is: ", instruction)
 
         # Convert to floats.
         frame = tf.to_float(frame)
@@ -170,8 +193,6 @@ class LSTMAgent(snt.RNNCore):
         conv_out = snt.BatchFlatten()(conv_out)
 
         conv_out = snt.Linear(256)(conv_out)
-        # TODO: Use the normalization here. 
-        # conv_out = normlize(conv_out) 
         conv_out = tf.nn.relu(conv_out)
 
         # Append clipped last reward and one hot last action.
@@ -202,11 +223,9 @@ class LSTMAgent(snt.RNNCore):
                                                 (action, env_output))
         outputs, core_state = self.unroll(actions, env_outputs, core_state)
         squeezed = nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
-        # print("squeezed (_build): ", squeezed)
         return squeezed, core_state
 
     # Just needs to know if the episode has ended. 
-    # This is used in build by 
     @snt.reuse_variables
     def unroll(self, actions, env_outputs, core_state):
         _, _, done, _ = env_outputs
@@ -218,7 +237,6 @@ class LSTMAgent(snt.RNNCore):
         # to the state reset. This can be XLA-compiled (LSTMBlockCell needs to be
         # changed to implement snt.LSTMCell).
         initial_core_state = self.initial_state(tf.shape(actions)[1])
-        # self._core.zero_state(tf.shape(actions)[1], tf.float32)
         core_output_list = []
         for input_, is_done in zip(tf.unstack(torso_outputs), tf.unstack(done)):
         # If the episode ended, the core state should be reset before the next.
@@ -226,14 +244,13 @@ class LSTMAgent(snt.RNNCore):
                                             initial_core_state, core_state)
             core_output, core_state = self._core(input_, core_state)
             core_output_list.append(core_output)
-        # print("core output list (unroll): ", len(core_output_list))
         output = snt.BatchApply(self._head)(tf.stack(core_output_list)), core_state
-        # print("Output is (unroll): ", output)
         return output
 
 def agent_factory(agent_name):
-  supported_agent = {
+  specific_agent = {
     'FeedForwardAgent'.lower(): FeedForwardAgent,
     'LSTMAgent'.lower(): LSTMAgent,
   }
-  return supported_agent[agent_name.lower()]
+
+  return specific_agent[agent_name.lower()]
