@@ -1,7 +1,7 @@
 # Attentive multi-tasking
 
 ## Current status
-- *Now supports PopArt normalization in a multi-task environment*
+- **Now supports PopArt normalization in a multi-task environment according to** [(Hessel et al., 2018)](https://arxiv.org/abs/1809.04474)
 - Proper implementation of the feed forward agent. 
 - Put the learner the GPU when it arrives (9th of May)
 
