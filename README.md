@@ -1,10 +1,7 @@
 # Attentive multi-tasking
 
 ## Current status
-- **Now supports PopArt normalization in a multi-task environment according to** [(Hessel et al., 2018)](https://arxiv.org/abs/1809.04474)
-- Proper implementation of the feed forward agent. 
-- Put the learner the GPU when it arrives (9th of May)
-
+- PopArt normalization in a multi-task environment according to [(Hessel et al., 2018)](https://arxiv.org/abs/1809.04474) 
 
 ## TODO 
 - Add PNN?
@@ -20,14 +17,13 @@
 There is a [Dockerfile][dockerfile] that serves as a reference for the
 pre-requisites and commands needed to run the code.
 
-### Single Machine Training on a Single Level
+### Local single machine training on multiple atari games. 
 
-#### Training on `BreakoutNoFrameSkip-v4`. 
-Run the code on [Breakout](https://gym.openai.com/envs/Breakout-v0/)
-
-Adjust the number of actors (i.e. number of environments) and batch size to
-match the size of the machine it runs on. A single actor, including DeepMind
-Lab, requires a few hundred MB of RAM.
+```
+python atari_experiment.py --num_actors=10 --batch_size=5 \
+    --entropy_cost=0.01 --learning_rate=0.0006 \
+    --total_environment_frames=2000000000
+```
 
 ### Run the agent in a distributed setting 
 Use a multiplexer to execute the following commands. 

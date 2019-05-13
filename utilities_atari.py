@@ -43,7 +43,6 @@ HUMAN_SCORES_ATARI = {
   # 'BoxingNoFrameskip-v4': 6.0,
 }
 
-
 RANDOM_SCORES_ATARI = {
   'BeamRiderNoFrameskip-v4': 0.5,
   'BreakoutNoFrameskip-v4': 1.0,
@@ -62,18 +61,6 @@ ALL_LEVELS_ATARI = frozenset([
  'SeaquestNoFrameskip-v4',
  'SpaceInvadersNoFrameskip-v4',
 ])
-
-
-# specific_action_set = {
-#   "BeamRiderNoFrameskip-v4": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'UPRIGHT', 'UPLEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-#   "BreakoutNoFrameskip-v4":   ("NOOP", 'FIRE', 'RIGHT', 'LEFT'),
-#   "PongNoFrameskip-v4":           ("NOOP", 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE'),
-#   "QbertNoFrameskip-v4": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN'),
-#   "SeaquestNoFrameskip-v4": ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
-#                           'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE'),
-#   "SpaceInvadersNoFrameskip-v4": ('NOOP', 'FIRE', 'RIGHT', 'LEFT', 'RIGHTFIRE', 'LEFTFIRE')
-# }
-
 
 def _transform_level_returns(level_returns):
   """Converts training level names to test level names."""

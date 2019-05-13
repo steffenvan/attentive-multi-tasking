@@ -18,7 +18,7 @@ from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute
 
 nest = tf.contrib.framework.nest
 AgentOutput = collections.namedtuple('AgentOutput',
-                                     'action policy_logits normalized_vf denormalized_vf')
+                                     'action policy_logits un_normalized_vf normalized_vf')
 
 def res_net_convolution(frame):
     for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
@@ -87,14 +87,14 @@ class FeedForwardAgent(snt.AbstractModule):
         last_linear_layer_vf = linear(torso_output)
 
         normalized_vf = last_linear_layer_vf
-        denormalized_vf = tf.stop_gradient(self._std) * normalized_vf + tf.stop_gradient(self._mean)
+        un_normalized_vf = tf.stop_gradient(self._std) * normalized_vf + tf.stop_gradient(self._mean)
 
         # Sample an action from the policy.
         new_action = tf.multinomial(policy_logits, num_samples=1,
                                     output_dtype=tf.int32)
         new_action = tf.squeeze(new_action, [1], name='new_action')
 
-        return AgentOutput(new_action, policy_logits, normalized_vf, denormalized_vf) 
+        return AgentOutput(new_action, policy_logits, un_normalized_vf, normalized_vf) 
 
     def _build(self, input_):
         action, env_output = input_
@@ -113,8 +113,8 @@ class FeedForwardAgent(snt.AbstractModule):
     
     def update_moments(self, vs, env_id):
         """
-        This function computes the normalization statistics for the actor and critic updates, and 
-        updates the statistics according to the Multi-task PopArt paper (Hessel et al., 2018). 
+        This function computes the adaptive normalization for the actor and critic updates
+        while preserving the outputs (PopArt) according to (Hessel et al., 2018). 
         https://arxiv.org/abs/1809.04474
 
         Args: 
@@ -122,8 +122,7 @@ class FeedForwardAgent(snt.AbstractModule):
             env_id: single game id. Used to pair the value function and specific game. 
 
         Returns:
-            A tuple of the updated first and second moments according to equation (6) 
-            in (Hessel et al., 2018)
+            A tuple of the updated first and second moments. 
         """
         with tf.variable_scope("feed_forward_agent/batch_apply_unroll/baseline", reuse=True):
             weight = tf.get_variable("w")
@@ -131,32 +130,32 @@ class FeedForwardAgent(snt.AbstractModule):
 
         def update_step(mm, _tuple):
             mean, mean_squared = mm
-            gvt, specific_env_id = _tuple
-            specific_env_id = tf.reshape(specific_env_id, [1, 1])
+            gvt, _env_id = _tuple
+            _env_id = tf.reshape(_env_id, [1, 1])
 
             # According to equation (6) in (Hessel et al., 2018).
             # Matching the specific game with it's current vtrace corrected value estimate. 
-            first_moment   = tf.reshape((1 - self._beta) * tf.gather(mean, specific_env_id) + self._beta * gvt, [1])
-            second_moment  = tf.reshape((1 - self._beta) * tf.gather(mean_squared, specific_env_id) + self._beta * tf.square(gvt), [1])
+            first_moment   = tf.reshape((1 - self._beta) * tf.gather(mean, _env_id) + self._beta * gvt, [1])
+            second_moment  = tf.reshape((1 - self._beta) * tf.gather(mean_squared, _env_id) + self._beta * tf.square(gvt), [1])
 
             # Matching the moments to the specific environment, so we only update the statistics for the specific game. 
-            n_mean         = tf.tensor_scatter_update(mean, specific_env_id, first_moment)
-            n_mean_squared = tf.tensor_scatter_update(mean_squared, specific_env_id, second_moment)
+            n_mean         = tf.tensor_scatter_update(mean, _env_id, first_moment)
+            n_mean_squared = tf.tensor_scatter_update(mean_squared, _env_id, second_moment)
             return n_mean, n_mean_squared
 
-        # The batch may contain different games, so we need to 
-        # ensure that the vtrace corrected value estimate matches the current game. 
+        # The batch may contain different games, so we need to ensure that 
+        # the vtrace corrected value estimate matches the current game. 
         def update_batch(mm, gvt):
             return tf.foldl(update_step, (gvt, env_id), initializer=mm)
 
         new_mean, new_mean_squared = tf.foldl(update_batch, vs, initializer=(self._mean, self._mean_squared))
         new_std = tf.sqrt(new_mean_squared - tf.square(new_mean)) 
 
-        # According to equation (9) in Multi-task PopArt paper
+        # According to equation (9) in (Hessel et al., 2018)
         weight_update = weight * self._std / new_std
         bias_update   = (self._std * bias + self._mean - new_mean) / new_std 
         
-        # And here we perform the Preserving outputs precisely (Pop) updates. 
+        # Preserving outputs precisely (Pop). 
         new_weight = tf.assign(weight, weight_update)
         new_bias = tf.assign(bias, bias_update)
         with tf.control_dependencies([new_weight, new_bias]):

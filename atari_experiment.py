@@ -86,8 +86,8 @@ ActorOutputFeedForward = collections.namedtuple(
 
 # Used to map the level name -> number for indexation
 game_id = {}
-games = utilities_atari.ATARI_GAMES
-for i, game in enumerate(games.keys()):
+games = utilities_atari.ATARI_GAMES.keys()
+for i, game in enumerate(games):
   game_id[game] = i
 
 def is_single_machine():
@@ -206,18 +206,18 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
     return tf.map_fn(get_single_game_info, (env_id, batch), dtype=tf.float32)
 
   learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
-  denormalized_vf = learner_outputs.denormalized_vf
+  un_normalized_vf = learner_outputs.un_normalized_vf
   normalized_vf   = learner_outputs.normalized_vf
 
-  game_specific_denormalized_vf = tf.map_fn(get_batch_value, denormalized_vf, dtype=tf.float32)
+  game_specific_un_normalized_vf = tf.map_fn(get_batch_value, un_normalized_vf, dtype=tf.float32)
   game_specific_normalized_vf   = tf.map_fn(get_batch_value, normalized_vf, dtype=tf.float32)
 
   # Ensure the learner separates the value functions for each game. 
-  # Like equation (10) in the Multi-task PopArt paper (Hessel et al., 2018). 
-  learner_outputs = learner_outputs._replace(denormalized_vf=game_specific_denormalized_vf,
+  # According to equation (10) in (Hessel et al., 2018). 
+  learner_outputs = learner_outputs._replace(un_normalized_vf=game_specific_un_normalized_vf,
                                              normalized_vf=game_specific_normalized_vf) 
   # Use last baseline value (from the value function) to bootstrap.
-  bootstrap_value = learner_outputs.denormalized_vf[-1]
+  bootstrap_value = learner_outputs.un_normalized_vf[-1]
  
   # At this point, the environment outputs at time step `t` are the inputs that
   # lead to the learner_outputs at time step `t`. After the following shifting,
@@ -238,6 +238,7 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
   discounts = tf.to_float(~done) * FLAGS.discounting
   game_specific_mean = tf.gather(agent._mean, env_id)
   game_specific_std = tf.gather(agent._std, env_id)
+
   # Compute V-trace returns and weights.
   # Note, this is put on the CPU because it's faster than on GPU. It can be
   # improved further with XLA-compilation or with a custom TensorFlow operation.
@@ -248,20 +249,22 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
         actions=agent_outputs.action,
         discounts=discounts,
         rewards=rewards,
-        values=learner_outputs.denormalized_vf,
+        un_normalized_values=learner_outputs.un_normalized_vf,
         normalized_values=learner_outputs.normalized_vf,
         mean=game_specific_mean,
         std=game_specific_std,
         bootstrap_value=bootstrap_value)
 
+  # First term of equation (7) in (Hessel et al., 2018)
+  normalized_vtrace = (vtrace_returns.vs - game_specific_mean) / game_specific_std
+  normalized_vtrace = tf.stop_gradient(normalized_vtrace)
+
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
-  # agent.
-  normalized_vtrace = (vtrace_returns.vs -game_specific_mean) / game_specific_std
-  normalized_vtrace = tf.stop_gradient(normalized_vtrace)
   total_loss = compute_policy_gradient_loss(
       learner_outputs.policy_logits, agent_outputs.action,
       vtrace_returns.pg_advantages)
+      
   total_loss += FLAGS.baseline_cost * compute_baseline_loss(
        normalized_vtrace - learner_outputs.normalized_vf)
 
@@ -295,10 +298,7 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
   tf.summary.scalar('total_loss', total_loss)
   tf.summary.histogram('action', agent_outputs.action)
 
-  new_mean, new_mean_squared = agent.update_moments(vtrace_returns.vs, env_id)
-
-  return (done, infos, num_env_frames_and_train) + (new_mean, new_mean_squared)
-
+  return (done, infos, num_env_frames_and_train) + (agent.update_moments(vtrace_returns.vs, env_id))
 
 
 def create_atari_environment(env_id, seed, is_test=False):
@@ -453,7 +453,7 @@ def train(action_set, level_names):
         # Returns an ActorOutput tuple -> (level name, agent_state, env_outputs, agent_output)
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
-
+        # Converting the tensor of level names to a normal integer used for indexing. 
         level_names_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32)
         level_names_index = tf.reshape(level_names_index, [FLAGS.batch_size])
 
@@ -501,6 +501,7 @@ def train(action_set, level_names):
         # Log the total return every *average_frames*.  
         average_frames = 24000 
         total_episode_return = 0.0
+        commandos = (data_from_actors.level_name,) + output + (stage_op,)
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, mean, _, std, _ = session.run(
               (data_from_actors.level_name,) + output + (agent._std, ) + (stage_op,))
@@ -622,10 +623,9 @@ def test(action_set, level_names):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = atari_environment.ATARI_ACTION_SET
-    all_games = utilities_atari.ATARI_GAMES.keys()
-    print("ALL GAMES: ", all_games)
+
     if FLAGS.mode == 'train':
-      train(action_set, all_games) 
+      train(action_set, games) 
     else:
       test(action_set, [FLAGS.level_name])
 
