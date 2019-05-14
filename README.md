@@ -2,6 +2,7 @@
 
 ## Current status
 - PopArt normalization in a multi-task environment according to [(Hessel et al., 2018)](https://arxiv.org/abs/1809.04474) 
+- All humand and random scores for the 57 Atari games are now included in `utilities_atari.py`. 
 
 ## TODO 
 - Add PNN?
