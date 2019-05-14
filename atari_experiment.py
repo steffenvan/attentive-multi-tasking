@@ -11,7 +11,6 @@ import os
 import sys
 from more_itertools import one 
 import utilities_atari
-from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 import atari_environment
 import numpy as np
 import py_process
@@ -92,6 +91,27 @@ for i, game in enumerate(games):
 
 def is_single_machine():
     return FLAGS.task == -1
+
+def compute_baseline_loss(advantages):
+  # Loss for the baseline, summed over the time dimension.
+  # Multiply by 0.5 to match the standard update rule:
+  # d(loss) / d(baseline) = advantage
+  return .5 * tf.reduce_sum(tf.square(advantages))
+
+def compute_entropy_loss(logits):
+  policy = tf.nn.softmax(logits)
+  log_policy = tf.nn.log_softmax(logits)
+  entropy_per_timestep = tf.reduce_sum(-policy * log_policy, axis=-1)
+  return -tf.reduce_sum(entropy_per_timestep)
+
+
+def compute_policy_gradient_loss(logits, actions, advantages):
+  cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+      labels=actions, logits=logits)
+  advantages = tf.stop_gradient(advantages)
+  policy_gradient_loss_per_timestep = cross_entropy * advantages
+  return tf.reduce_sum(policy_gradient_loss_per_timestep)
+
 
 def build_actor(agent, env, level_name, action_set):
   """Builds the actor loop."""
@@ -532,9 +552,9 @@ def train(action_set, level_names):
             #                 total_episode_return, average_frames)
           current_episode_return_list = min(map(len, level_returns.values())) 
           if current_episode_return_list >= 1:
-            no_cap = utilities_atari.compute_human_normalized_score(level_returns,
+            no_cap = compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
-            cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
+            cap_100 = compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
             if total_episode_frames % average_frames == 0:
               with open("multi-actors-output.txt", "a+") as f:
@@ -614,9 +634,9 @@ def test(action_set, level_names):
             tf.logging.info('Mean episode return: %f', np.mean(returns))
             break
 
-  no_cap = utilities_atari.compute_human_normalized_score(level_returns,
+  no_cap = compute_human_normalized_score(level_returns,
                                                   per_level_cap=None)
-  cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
+  cap_100 = compute_human_normalized_score(level_returns,
                                                     per_level_cap=100)
   tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
 
