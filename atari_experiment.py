@@ -558,9 +558,9 @@ def train(action_set, level_names):
             #                 total_episode_return, average_frames)
           current_episode_return_list = min(map(len, level_returns.values())) 
           if current_episode_return_list >= 1:
-            no_cap = compute_human_normalized_score(level_returns,
+            no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
-            cap_100 = compute_human_normalized_score(level_returns,
+            cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
             if total_episode_frames % average_frames == 0:
               with open("multi-actors-output.txt", "a+") as f:
@@ -584,12 +584,12 @@ def train(action_set, level_names):
             level_returns = {level_name: [] for level_name in level_names}
 
           # Calculate total reward after last X frames
-          # if total_episode_frames % average_frames == 0:
-          #   for level_name in level_names: 
-          #     with open(level_name + ".txt", "a+") as f:
-          #       f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
-          #     total_level_returns[level_name] = 0.0
-          #   total_episode_frames = 0
+          if total_episode_frames % average_frames == 0:
+            for level_name in level_names: 
+              with open(level_name + ".txt", "a+") as f:
+                f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
+              total_level_returns[level_name] = 0.0
+            total_episode_frames = 0
 
       else:
         # Execute actors (they just need to enqueue their output).
@@ -640,9 +640,9 @@ def test(action_set, level_names):
             tf.logging.info('Mean episode return: %f', np.mean(returns))
             break
 
-  no_cap = compute_human_normalized_score(level_returns,
+  no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                   per_level_cap=None)
-  cap_100 = compute_human_normalized_score(level_returns,
+  cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
                                                     per_level_cap=100)
   tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
 
