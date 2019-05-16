@@ -43,7 +43,6 @@ def res_net_convolution(frame):
 
 def shallow_convolution(frame):
     conv_out = frame
-    # Downscale.
     conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
     conv_out = tf.nn.relu(conv_out)
     conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
@@ -66,9 +65,11 @@ class FeedForwardAgent(snt.AbstractModule):
         # Convert to floats.
         frame = tf.to_float(frame)
         frame /= 255
-        
+       
+
+        # Using ResNet as described in the paper
         with tf.variable_scope('convnet'):
-            conv_out = shallow_convolution(frame)
+             conv_out = res_net_convolution(frame)
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.BatchFlatten()(conv_out)
         conv_out = snt.Linear(256)(conv_out)
@@ -113,7 +114,7 @@ class FeedForwardAgent(snt.AbstractModule):
     
     def update_moments(self, vs, env_id):
         """
-        This function computes the adaptive normalization for the actor and critic updates
+        This function computes the adaptive normalization statistics for the actor and critic updates
         while preserving the outputs (PopArt) according to (Hessel et al., 2018). 
         https://arxiv.org/abs/1809.04474
 

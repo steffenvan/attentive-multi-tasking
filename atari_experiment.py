@@ -9,7 +9,7 @@ import contextlib
 import functools
 import os
 import sys
-from more_itertools import one 
+#from more_itertools import one 
 import utilities_atari
 import atari_environment
 import numpy as np
@@ -67,7 +67,7 @@ flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
 flags.DEFINE_float('discounting', .99, 'Discounting factor.')
 # flags.DEFINE_enum('reward_clipping', 'None', ['abs_one', 'soft_asymmetric'],
 #                   'Reward clipping.')
-flags.DEFINE_float('gradient_clipping', -40.0, 'Negative means no clipping')
+flags.DEFINE_float('gradient_clipping', 40.0, 'Negative means no clipping')
 
 # Optimizer settings.
 flags.DEFINE_float('learning_rate', 0.0006, 'Learning rate.')
@@ -489,8 +489,10 @@ def train(action_set, level_names):
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
-    config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters)
-    logdir = os.path.join(FLAGS.logdir, "multi-task-test")
+    config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters, log_device_placement=True)
+    config.gpu_options.allow_growth = True
+    config.gpu_options.per_process_gpu_memory_fraction = 0.8
+    logdir = "multi-task-test"
     
     with tf.train.MonitoredTrainingSession(
         server.target,
