@@ -489,7 +489,7 @@ def train(action_set, level_names):
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
-    config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters, log_device_placement=True)
+    config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters) 
     config.gpu_options.allow_growth = True
     config.gpu_options.per_process_gpu_memory_fraction = 0.8
     logdir = "multi-task-test"
@@ -540,12 +540,16 @@ def train(action_set, level_names):
 
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
-            print('mean: {} \n std: {}'.format(mean, std))
+#            print('mean: {} \n std: {}'.format(mean[game_id[level_name]], std))
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
             summary.value.add(tag=level_name + '/episode_frames',
                               simple_value=episode_frames)
+            summary.value.add(tag=level_name + '/mean', 
+                              simple_value=mean[game_id[level_name]])
+            summary.value.add(tag=level_name + '/std',
+                              simple_value=std[game_id[level_name]])
             summary_writer.add_summary(summary, num_env_frames_v)
 
             level_returns[level_name].append(episode_return)
