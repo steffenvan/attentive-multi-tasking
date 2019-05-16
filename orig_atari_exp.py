@@ -75,8 +75,8 @@ flags.DEFINE_integer('height', 84, 'Height of observation')
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
 flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
 flags.DEFINE_float('discounting', .99, 'Discounting factor.')
-# flags.DEFINE_enum('reward_clipping', 'None', ['abs_one', 'soft_asymmetric'],
-#                   'Reward clipping.')
+flags.DEFINE_enum('reward_clipping', 'abs_one', ['abs_one', 'soft_asymmetric'],
+                  'Reward clipping.')
 flags.DEFINE_float('gradient_clipping', 40.0, 'Negative means no clipping')
 
 # Optimizer settings.
@@ -142,7 +142,7 @@ class Agent(snt.RNNCore):
 
   def _torso(self, input_):
     last_action, env_output = input_
-    reward, _, _, (frame, instruction) = env_output
+    reward, _, _, frame = env_output
 
     # Convert to floats.
     frame = tf.to_float(frame)
@@ -176,13 +176,13 @@ class Agent(snt.RNNCore):
     conv_out = snt.Linear(256)(conv_out)
     conv_out = tf.nn.relu(conv_out)
 
-    instruction_out = self._instruction(instruction)
+    # instruction_out = self._instruction(instruction)
 
     # Append clipped last reward and one hot last action.
     clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
     one_hot_last_action = tf.one_hot(last_action, self._num_actions)
     return tf.concat(
-        [conv_out, clipped_reward, one_hot_last_action, instruction_out],
+        [conv_out, clipped_reward, one_hot_last_action],
         axis=1)
 
   def _head(self, core_output):
@@ -605,8 +605,8 @@ def train(action_set, level_names):
               infos_v.episode_step[done_v]):
             episode_frames = episode_step * FLAGS.num_action_repeats
 
-            tf.logging.info('Level: %s Episode return: %f',
-                            level_name, episode_return)
+            tf.logging.info('Level: %s Episode return: %f frames: %d',
+                            level_name, episode_return, num_env_frames_v)
 
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
