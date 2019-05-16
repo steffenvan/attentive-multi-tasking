@@ -51,7 +51,7 @@ flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
 
 # Environment settings
-flags.DEFINE_integer('total_environment_frames', int(2e8),
+flags.DEFINE_integer('total_environment_frames', int(2e9),
                      'Total environment frames to train for.')
 flags.DEFINE_integer('num_actors', 1, 'Number of actors.')
 flags.DEFINE_integer('batch_size', 1, 'Batch size for training.')
@@ -491,7 +491,7 @@ def train(action_set, level_names):
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters) 
     config.gpu_options.allow_growth = True
-    config.gpu_options.per_process_gpu_memory_fraction = 0.8
+    # config.gpu_options.per_process_gpu_memory_fraction = 0.8
     logdir = "multi-task-test"
     
     with tf.train.MonitoredTrainingSession(

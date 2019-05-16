@@ -149,7 +149,8 @@ class FeedForwardAgent(snt.AbstractModule):
             return tf.foldl(update_step, (gvt, env_id), initializer=mm)
 
         new_mean, new_mean_squared = tf.foldl(update_batch, vs, initializer=(self._mean, self._mean_squared))
-        new_std = tf.sqrt(new_mean_squared - tf.square(new_mean)) 
+        new_std = tf.sqrt(new_mean_squared - tf.square(new_mean))
+        new_std = tf.clip_by_value(new_std, 0.0001, 1e6)
 
         # According to equation (9) in (Hessel et al., 2018)
         weight_update = weight * self._std / new_std
