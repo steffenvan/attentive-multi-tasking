@@ -66,8 +66,7 @@ class FeedForwardAgent(snt.AbstractModule):
         frame = tf.to_float(frame)
         frame /= 255
        
-
-        # Using ResNet as described in the paper
+        # Using ResNet for multi-task learning as described in the paper.  
         with tf.variable_scope('convnet'):
              conv_out = res_net_convolution(frame)
         conv_out = tf.nn.relu(conv_out)
