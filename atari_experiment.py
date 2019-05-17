@@ -53,8 +53,8 @@ flags.DEFINE_integer('height', 84, 'Height of observation')
 # Environment settings
 flags.DEFINE_integer('total_environment_frames', int(2e9),
                      'Total environment frames to train for.')
-flags.DEFINE_integer('num_actors', 1, 'Number of actors.')
-flags.DEFINE_integer('batch_size', 1, 'Batch size for training.')
+flags.DEFINE_integer('num_actors', 16, 'Number of actors.')
+flags.DEFINE_integer('batch_size', 8, 'Batch size for training.')
 flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
@@ -491,7 +491,7 @@ def train(action_set, level_names):
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters) 
     config.gpu_options.allow_growth = True
-    # config.gpu_options.per_process_gpu_memory_fraction = 0.8
+    config.gpu_options.per_process_gpu_memory_fraction = 0.8
     logdir = "multi-task-test"
     
     with tf.train.MonitoredTrainingSession(
@@ -573,7 +573,7 @@ def train(action_set, level_names):
                 tag='atari/training_no_cap', simple_value=no_cap)
             summary.value.add(
                 tag='atari/training_cap_100', simple_value=cap_100)
-            # summary_writer.add_summary(summary, num_env_frames_v)
+            summary_writer.add_summary(summary, num_env_frames_v)
 
             # Clear level scores.
             # Add the episode returns before resetting for logging purposes. 
@@ -586,7 +586,8 @@ def train(action_set, level_names):
           # Calculate total reward after last X frames
           if total_episode_frames % average_frames == 0:
             for level_name in level_names: 
-              with open(level_name + ".txt", "a+") as f:
+              outputs = os.path.join("outputs", level_name + ".txt")
+              with open(outputs, "a+") as f:
                 f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
               total_level_returns[level_name] = 0.0
             total_episode_frames = 0
