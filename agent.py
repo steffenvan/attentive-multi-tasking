@@ -53,10 +53,13 @@ class FeedForwardAgent(snt.AbstractModule):
         super(FeedForwardAgent, self).__init__(name="feed_forward_agent")
         self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
         self._num_actions  = num_actions
-        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]))
-        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]))
-        self._std          = tf.sqrt(self._mean_squared - tf.square(self._mean))
-        self._beta         = 0.0004
+        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]), trainable=False)
+        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]), trainable=False)
+        self._std          = nest.map_structure(tf.stop_gradient, 
+                                                tf.sqrt(self._mean_squared - tf.square(self._mean)))
+        self._beta         = 3e-4
+        self._stable_rate  = 0.1
+        self._epsilon      = 1e-4
 
     def _torso(self, input_):
         last_action, env_output = input_
@@ -87,7 +90,7 @@ class FeedForwardAgent(snt.AbstractModule):
         last_linear_layer_vf = linear(torso_output)
 
         normalized_vf = last_linear_layer_vf
-        un_normalized_vf = tf.stop_gradient(self._std) * normalized_vf + tf.stop_gradient(self._mean)
+        un_normalized_vf = self._std * normalized_vf + self._mean
 
         # Sample an action from the policy.
         new_action = tf.multinomial(policy_logits, num_samples=1,
@@ -150,15 +153,16 @@ class FeedForwardAgent(snt.AbstractModule):
 
         new_mean, new_mean_squared = tf.foldl(update_batch, vs, initializer=(self._mean, self._mean_squared))
         new_std = tf.sqrt(new_mean_squared - tf.square(new_mean))
-        new_std = tf.clip_by_value(new_std, 0.0001, 1e6)
+        new_std = tf.clip_by_value(new_std, self._epsilon, 1e6)
 
         # According to equation (9) in (Hessel et al., 2018)
+
         weight_update = weight * self._std / new_std
         bias_update   = (self._std * bias + self._mean - new_mean) / new_std 
-        
         # Preserving outputs precisely (Pop). 
         new_weight = tf.assign(weight, weight_update)
         new_bias = tf.assign(bias, bias_update)
+                
         with tf.control_dependencies([new_weight, new_bias]):
             new_mean = tf.assign(self._mean, new_mean)
             new_mean_squared = tf.assign(self._mean_squared, new_mean_squared)
