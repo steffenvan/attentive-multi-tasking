@@ -51,7 +51,7 @@ flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
 
 # Environment settings
-flags.DEFINE_integer('total_environment_frames', int(2e9),
+flags.DEFINE_integer('total_environment_frames', int(5e8),
                      'Total environment frames to train for.')
 flags.DEFINE_integer('num_actors', 16, 'Number of actors.')
 flags.DEFINE_integer('batch_size', 8, 'Batch size for training.')
@@ -228,8 +228,10 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
   learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
   un_normalized_vf = learner_outputs.un_normalized_vf
   normalized_vf   = learner_outputs.normalized_vf
+  
 
   game_specific_un_normalized_vf = tf.map_fn(get_batch_value, un_normalized_vf, dtype=tf.float32)
+  # game_specific_un_normalized_vf = tf.reduce_sum(game)
   game_specific_normalized_vf   = tf.map_fn(get_batch_value, normalized_vf, dtype=tf.float32)
 
   # Ensure the learner separates the value functions for each game. 
@@ -277,17 +279,22 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
 
   # First term of equation (7) in (Hessel et al., 2018)
   normalized_vtrace = (vtrace_returns.vs - game_specific_mean) / game_specific_std
+
   normalized_vtrace = tf.stop_gradient(normalized_vtrace)
+
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
   # loss and an entropy regularization term.
   total_loss = compute_policy_gradient_loss(
       learner_outputs.policy_logits, agent_outputs.action,
       vtrace_returns.pg_advantages)
-      
-  total_loss += FLAGS.baseline_cost * compute_baseline_loss(
-       normalized_vtrace - learner_outputs.normalized_vf)
 
+  baseline_loss = compute_baseline_loss(
+       normalized_vtrace - learner_outputs.normalized_vf)
+  # Using the average GvT 
+  baseline_loss = tf.divide(baseline_loss, FLAGS.unroll_length)
+
+  total_loss += FLAGS.baseline_cost * baseline_loss
   total_loss += FLAGS.entropy_cost * compute_entropy_loss(
       learner_outputs.policy_logits)
 
@@ -303,6 +310,7 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
   # Use reward clipping for atari games only 
   if FLAGS.gradient_clipping > 0.0:
     gradients, variables = zip(*optimizer.compute_gradients(total_loss))
+    print("VARIABLES: ", variables)
     gradients, _ = tf.clip_by_global_norm(gradients, FLAGS.gradient_clipping)
     train_op = optimizer.apply_gradients(list(zip(gradients, variables)))
   else:
@@ -384,7 +392,6 @@ def train(action_set, level_names):
   # Only used to find the actor output structure.
   Agent = agent_factory(FLAGS.agent_name)
   with tf.Graph().as_default():
-    print("GAMES: ", level_names)
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     agent = Agent(len(action_set))
