@@ -147,7 +147,7 @@ def build_actor(agent, env, level_name, action_set):
 
     # Convert action index to the native action.
     action = agent_output[0][0]
-    raw_action = action
+    raw_action = tf.gather(action_set, action)
     env_output, env_state = env.step(raw_action, env_state)
 
     return env_state, env_output, agent_output
@@ -199,7 +199,7 @@ def build_actor(agent, env, level_name, action_set):
     # No backpropagation should be done here.
     return nest.map_structure(tf.stop_gradient, output)
 
-def build_learner(agent, env_outputs, agent_outputs, env_id):
+def build_learner(agent, env_outputs, agent_outputs, env_id, global_step):
   """Builds the learner loop.
 
   Args:
@@ -280,7 +280,7 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
   # First term of equation (7) in (Hessel et al., 2018)
   normalized_vtrace = (vtrace_returns.vs - game_specific_mean) / game_specific_std
 
-  normalized_vtrace = tf.stop_gradient(normalized_vtrace)
+  normalized_vtrace = nest.map_structure(tf.stop_gradient, normalized_vtrace)
 
 
   # Compute loss as a weighted sum of the baseline loss, the policy gradient
@@ -309,10 +309,13 @@ def build_learner(agent, env_outputs, agent_outputs, env_id):
 
   # Use reward clipping for atari games only 
   if FLAGS.gradient_clipping > 0.0:
-    gradients, variables = zip(*optimizer.compute_gradients(total_loss))
-    print("VARIABLES: ", variables)
+    # gradients, variables = zip(*optimizer.compute_gradients(total_loss))
+    variables = tf.trainable_variables()
+    gradients = tf.gradients(total_loss, variables)
+    # print("VARIABLES: ", variables)
     gradients, _ = tf.clip_by_global_norm(gradients, FLAGS.gradient_clipping)
-    train_op = optimizer.apply_gradients(list(zip(gradients, variables)))
+    print("GRADIENTS: ", gradients)
+    train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
   else:
     train_op = optimizer.minimize(total_loss)
 
@@ -447,7 +450,7 @@ def train(action_set, level_names):
     # Build learner.
     if is_learner:
       # Create global step, which is the number of environment frames processed.
-      tf.get_variable(
+      global_step = tf.get_variable(
           'num_environment_frames',
           initializer=tf.zeros_initializer(),
           shape=[],
@@ -492,7 +495,8 @@ def train(action_set, level_names):
         output = build_learner(agent,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs,
-                               level_names_index)
+                               level_names_index,
+                               global_step=global_step)
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
@@ -530,7 +534,6 @@ def train(action_set, level_names):
         # Log the total return every *average_frames*.  
         average_frames = 24000 
         total_episode_return = 0.0
-        commandos = (data_from_actors.level_name,) + output + (stage_op,)
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, mean, _, std, _ = session.run(
               (data_from_actors.level_name,) + output + (agent._std, ) + (stage_op,))
