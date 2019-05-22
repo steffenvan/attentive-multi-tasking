@@ -488,8 +488,8 @@ def train(action_set, level_names):
         level_names_index = tf.reshape(level_names_index, [FLAGS.batch_size])
 
         # If LSTM agent, we use the hidden states
-        if hasattr(data_from_actors, 'agent_state'):
-          agent_state = data_from_actors.agent_state
+        # if hasattr(data_from_actors, 'agent_state'):
+        #   agent_state = data_from_actors.agent_state
 
         # Unroll agent on sequence, create losses and update ops.
         output = build_learner(agent,
@@ -541,10 +541,12 @@ def train(action_set, level_names):
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
           total_episode_frames = num_env_frames_v
 
-          for level_name, episode_return, episode_step in zip(
+          for level_name, episode_return, episode_step, acc_episode_return, acc_episode_step in zip(
               level_names_v[done_v],
               infos_v.episode_return[done_v],
-              infos_v.episode_step[done_v]):
+              infos_v.episode_step[done_v],
+              infos_v.acc_episode_reward[done_v],
+              infos.v.acc_episode_step[done_v]):
 
             episode_frames = episode_step * FLAGS.num_action_repeats
 
@@ -556,9 +558,13 @@ def train(action_set, level_names):
                               simple_value=episode_return)
             summary.value.add(tag=level_name + '/episode_frames',
                               simple_value=episode_frames)
-            summary.value.add(tag=level_name + '/mean', 
+            summary.value.add(tag=level_name + '/acc_episode_return',
+                                simple_value=acc_episode_reward)
+            summary.value.add(tag=level_name + '/acc_episode_frames',
+                                simple_value=acc_episode_step)
+            summary.value.add(tag=level_name + '/env_mean', 
                               simple_value=mean[game_id[level_name]])
-            summary.value.add(tag=level_name + '/std',
+            summary.value.add(tag=level_name + '/env_std',
                               simple_value=std[game_id[level_name]])
             summary_writer.add_summary(summary, num_env_frames_v)
 
@@ -605,7 +611,7 @@ def train(action_set, level_names):
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
-          print(session.run(enqueue_ops))
+          # print(session.run(enqueue_ops))
           session.run(enqueue_ops)
 
 def test(action_set, level_names):

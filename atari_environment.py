@@ -30,7 +30,7 @@ import gym
 nest = tf.contrib.framework.nest
 
 StepOutputInfo = collections.namedtuple('StepOutputInfo',
-                                        'episode_return episode_step')
+                                        'episode_return episode_step acc_episode_reward acc_episode_step')
 StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
 ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
@@ -74,17 +74,18 @@ class PyProcessAtari(object):
     def step(self, action):
       # If the current action exceeds the range of the specific game's action set length -> NOOP
       if action >= self._env.action_space.n:
-        obs, reward, is_done, _ = self._env.step(0)
+        obs, reward, is_done, info = self._env.step(0)
       else: 
-        obs, reward, is_done, _ = self._env.step(action)
+        obs, reward, is_done, info = self._env.step(action)
         
       if is_done:
         obs = self._env.reset() 
 
       reward = np.float32(reward)
       obs = self._transpose_obs(obs)
-
-      return reward, is_done, obs
+      acc_raw_reward = np.float32(info['sum_raw_reward'])
+      acc_raw_step = np.float32(info['sum_raw_step'])
+      return reward, is_done, obs, acc_raw_reward, acc_raw_step
 
     def close(self):
       self._env.close()
@@ -105,6 +106,8 @@ class PyProcessAtari(object):
             tf.contrib.framework.TensorSpec([], tf.float32),
             tf.contrib.framework.TensorSpec([], tf.bool),
             observation_spec,
+            tf.contrib.framework.TensorSpec([], tf.float32),
+            tf.contrib.framework.TensorSpec([], tf.float32),
         )
 
 class FlowEnvironment(object):
@@ -139,7 +142,7 @@ class FlowEnvironment(object):
     """
     with tf.name_scope('flow_environment_initial'):
       initial_reward = tf.constant(0.)
-      initial_info = StepOutputInfo(tf.constant(0.), tf.constant(0))
+      initial_info = StepOutputInfo(tf.constant(0.), tf.constant(0), tf.constant(0), tf.constant(0))
       initial_done = tf.constant(True)
   
       initial_observation = self._env.initial()
@@ -177,7 +180,7 @@ class FlowEnvironment(object):
       # Make sure the previous step has been executed before running the next
       # step.
       with tf.control_dependencies([flow]):
-        reward, done, observation = self._env.step(action)
+        reward, done, observation , acc_reward, acc_step = self._env.step(action)
 
       with tf.control_dependencies(nest.flatten(observation)):
         new_flow = tf.add(flow, 1)
@@ -185,10 +188,14 @@ class FlowEnvironment(object):
       # When done, include the reward in the output info but not in the
       # state for the next step.
       new_info = StepOutputInfo(info.episode_return + reward,
-                                info.episode_step + 1)
+                                info.episode_step + 1,
+                                acc_episode_reward=acc_reward,
+                                acc_episode_step=acc_step)
       new_state = new_flow, nest.map_structure(
           lambda a, b: tf.where(done, a, b),
-          StepOutputInfo(tf.constant(0.), tf.constant(0)),
+          StepOutputInfo(tf.constant(0.), tf.constant(0),
+          new_info.acc_episode_reward,
+          new_info.acc_episode_step),
           new_info)
 
       output = StepOutput(reward, new_info, done, observation)
