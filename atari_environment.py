@@ -67,9 +67,6 @@ class PyProcessAtari(object):
     def initial(self):
       initial_obs = self._transpose_obs(self._reset())
       return initial_obs
-    
-    def render(self):
-      return self._env.render()
 
     def step(self, action):
       # If the current action exceeds the range of the specific game's action set length -> NOOP
@@ -79,12 +76,12 @@ class PyProcessAtari(object):
         obs, reward, is_done, info = self._env.step(action)
         
       if is_done:
-        obs = self._env.reset() 
+        obs = self.reset() 
 
       reward = np.float32(reward)
       obs = self._transpose_obs(obs)
-      acc_raw_reward = np.float32(info['sum_raw_reward'])
-      acc_raw_step = np.float32(info['sum_raw_step'])
+      acc_raw_reward = np.float32(info['acc_raw_reward'])
+      acc_raw_step = np.int32(info['acc_raw_step'])
       return reward, is_done, obs, acc_raw_reward, acc_raw_step
 
     def close(self):
@@ -107,7 +104,7 @@ class PyProcessAtari(object):
             tf.contrib.framework.TensorSpec([], tf.bool),
             observation_spec,
             tf.contrib.framework.TensorSpec([], tf.float32),
-            tf.contrib.framework.TensorSpec([], tf.float32),
+            tf.contrib.framework.TensorSpec([], tf.int32),
         )
 
 class FlowEnvironment(object):
@@ -142,7 +139,7 @@ class FlowEnvironment(object):
     """
     with tf.name_scope('flow_environment_initial'):
       initial_reward = tf.constant(0.)
-      initial_info = StepOutputInfo(tf.constant(0.), tf.constant(0), tf.constant(0), tf.constant(0))
+      initial_info = StepOutputInfo(tf.constant(0.), tf.constant(0), tf.constant(0.), tf.constant(0))
       initial_done = tf.constant(True)
   
       initial_observation = self._env.initial()

@@ -541,12 +541,12 @@ def train(action_set, level_names):
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
           total_episode_frames = num_env_frames_v
 
-          for level_name, episode_return, episode_step, acc_episode_return, acc_episode_step in zip(
+          for level_name, episode_return, episode_step, acc_episode_reward, acc_episode_step in zip(
               level_names_v[done_v],
               infos_v.episode_return[done_v],
               infos_v.episode_step[done_v],
               infos_v.acc_episode_reward[done_v],
-              infos.v.acc_episode_step[done_v]):
+              infos_v.acc_episode_step[done_v]):
 
             episode_frames = episode_step * FLAGS.num_action_repeats
 

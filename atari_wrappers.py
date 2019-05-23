@@ -18,15 +18,15 @@ class NoopResetEnv(gym.Wrapper):
         self.noop_max = noop_max
         self.override_num_noops = None
         self.noop_action = 0
-        self.sum_raw_reward = 0
-        self.sum_raw_step = 0
+        self.acc_raw_reward = 0
+        self.acc_raw_step = 0
         assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
 
     def reset(self, **kwargs):
         """ Do no-op action for a number of steps in [1, noop_max]."""
         self.env.reset(**kwargs)
-        self.sum_raw_reward = 0
-        self.sum_raw_step = 0
+        self.acc_raw_reward = 0
+        self.acc_raw_step = 0
         if self.override_num_noops is not None:
             noops = self.override_num_noops
         else:
@@ -37,16 +37,16 @@ class NoopResetEnv(gym.Wrapper):
             obs, _, done, _ = self.env.step(self.noop_action)
             if done:
                 obs = self.env.reset(**kwargs)
-                self.sum_raw_reward = 0
-                self.sum_raw_step = 0
+                self.acc_raw_reward = 0
+                self.acc_raw_step = 0
         return obs
 
     def step(self, ac):
         obs, rwd, done, info = self.env.step(ac)
-        self.sum_raw_reward += rwd
-        self.sum_raw_step += 1
-        info['sum_raw_reward'] = self.sum_raw_reward
-        info['sum_raw_step'] = self.sum_raw_step
+        self.acc_raw_reward += rwd
+        self.acc_raw_step += 1
+        info['acc_raw_reward'] = self.acc_raw_reward
+        info['acc_raw_step'] = self.acc_raw_step
         return (obs,rwd,done,info)
 
 class FireResetEnv(gym.Wrapper):

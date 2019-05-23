@@ -14,7 +14,7 @@ import sys
 import vtrace
 import numpy as np
 import utilities_atari
-from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
+# from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
 nest = tf.contrib.framework.nest
 AgentOutput = collections.namedtuple('AgentOutput',
