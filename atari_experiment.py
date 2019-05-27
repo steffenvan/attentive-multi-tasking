@@ -397,7 +397,6 @@ def train(action_set, level_names):
   with tf.Graph().as_default():
     env = create_atari_environment(level_names[0], seed=1)
     agent = Agent(len(action_set))
-
     structure = build_actor(agent, env, level_names[0], action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
@@ -435,7 +434,8 @@ def train(action_set, level_names):
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
-        # tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
+        # specific_action_set = atari_environment.get_action_set(level_name)
+        # tf.logging.info('Current game: {} with action set: {}'.format(level_name, specific_action_set))
         actor_output = build_actor(agent, env, level_name, action_set)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -650,9 +650,9 @@ def test(action_set, level_names):
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
-    action_set = atari_environment.ATARI_ACTION_SET
+    # action_set = atari_environment.ATARI_ACTION_SET
     test_action_set = atari_environment.get_action_set(FLAGS.level_name)
-
+    action_set = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ,15 ,16 ,17]
     if FLAGS.mode == 'train':
       train(action_set, games) 
     else:
