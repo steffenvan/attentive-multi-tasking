@@ -32,7 +32,7 @@ nest = tf.contrib.framework.nest
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
 
-flags.DEFINE_string('logdir', '/tmp/agent', 'TensorFlow log directory.')
+flags.DEFINE_string('logdir', 'popart-multi-task', 'TensorFlow log directory.')
 flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 
 # Flags used for testing.
@@ -250,12 +250,12 @@ def build_learner(agent, env_outputs, agent_outputs, env_id, global_step):
       lambda t: t[1:], env_outputs)
   learner_outputs = nest.map_structure(lambda t: t[:-1], learner_outputs)
 
-  # if FLAGS.reward_clipping == 'abs_one':
-  #   clipped_rewards = tf.clip_by_value(rewards, -1, 1)
-  # elif FLAGS.reward_clipping == 'soft_asymmetric':
-  #   squeezed = tf.tanh(rewards / 5.0)
-  #   # Negative rewards are given less weight than positive rewards.
-  #   clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
+  if FLAGS.reward_clipping == 'abs_one':
+    clipped_rewards = tf.clip_by_value(rewards, -1, 1)
+  elif FLAGS.reward_clipping == 'soft_asymmetric':
+    squeezed = tf.tanh(rewards / 5.0)
+    # Negative rewards are given less weight than positive rewards.
+    clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
 
   discounts = tf.to_float(~done) * FLAGS.discounting
   game_specific_mean = tf.gather(agent._mean, env_id)
@@ -518,7 +518,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
-        total_level_returns = {level_name: 0.0 for level_name in level_names}
+        # total_level_returns = {level_name: 0.0 for level_name in level_names}
         # TODO: Needed for now? 
         summary_dir = os.path.join(FLAGS.logdir, "logging")
         summary_writer = tf.summary.FileWriterCache.get(summary_dir)
@@ -552,7 +552,7 @@ def train(action_set, level_names):
 
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
-#            print('mean: {} \n std: {}'.format(mean[game_id[level_name]], std))
+            print('game: {} mean: {} \n std: {}'.format(game_id[level_name], mean[game_id[level_name]], std[game_id[level_name]]))
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
@@ -572,8 +572,7 @@ def train(action_set, level_names):
 
             # tf.logging.info('total return %f last %d frames', 
             #                 total_episode_return, average_frames)
-          current_episode_return_list = min(map(len, level_returns.values())) 
-          if current_episode_return_list >= 1:
+          if min(map(len, level_returns.values())) >= 1:
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
             cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
@@ -593,20 +592,20 @@ def train(action_set, level_names):
 
             # Clear level scores.
             # Add the episode returns before resetting for logging purposes. 
-            level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
-            for level_name in level_names:
-              total_level_returns[level_name] += level_returns[level_name]
+            # level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
+            # for level_name in level_names:
+            #   total_level_returns[level_name] += level_returns[level_name]
                       
             level_returns = {level_name: [] for level_name in level_names}
 
           # Calculate total reward after last X frames
-          if total_episode_frames % average_frames == 0:
-            for level_name in level_names: 
-              outputs = os.path.join("outputs", level_name + ".txt")
-              with open(outputs, "a+") as f:
-                f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
-              total_level_returns[level_name] = 0.0
-            total_episode_frames = 0
+          # if total_episode_frames % average_frames == 0:
+          #   for level_name in level_names: 
+          #     outputs = os.path.join("outputs", level_name + ".txt")
+          #     with open(outputs, "a+") as f:
+          #       f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
+          #     total_level_returns[level_name] = 0.0
+          #   total_episode_frames = 0
 
       else:
         # Execute actors (they just need to enqueue their output).
@@ -616,27 +615,17 @@ def train(action_set, level_names):
 
 def test(action_set, level_names):
   """Test."""
-  def is_single_game():
-    return len(level_names) < 2
+
   Agent = agent_factory(FLAGS.agent_name)
-  if is_single_game():
-    level_name = one(level_names)
-    level_returns = {level_name: []}
-  else:
-    level_returns = {level_name: [] for level_name in level_names}
+  level_returns = {level_name: [] for level_name in level_names}
   with tf.Graph().as_default():
-    outputs = {}
     agent = Agent(len(action_set))
-    if is_single_game():
+    outputs = {}
+    for level_name in level_names:
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
-    # TODO: For multiple agents at once 
-    else: 
-      for level_name in level_names:
-        env = create_atari_environment(level_name, seed=1, is_test=True)
-        outputs[level_name] = build_actor(agent, env, level_name, action_set)
 
-    logdir = os.path.join(FLAGS.logdir, level_name)
+    logdir = "multi-task"
     # tf.logging.info("LOGDIR IS: {}".format(logdir))
     with tf.train.SingularMonitoredSession(
         checkpoint_dir=logdir,
@@ -666,11 +655,12 @@ def test(action_set, level_names):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = atari_environment.ATARI_ACTION_SET
+    test_action_set = atari_environment.get_action_set(FLAGS.level_name)
 
     if FLAGS.mode == 'train':
       train(action_set, games) 
     else:
-      test(action_set, [FLAGS.level_name])
+      test(test_action_set, [FLAGS.level_name])
 
 if __name__ == '__main__':
     tf.app.run()    
