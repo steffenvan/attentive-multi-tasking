@@ -53,6 +53,10 @@ def get_observation_spec(env_id):
   obs_shape = env.observation_space.shape
   return obs_shape
 
+def get_action_set(level_name):
+  env  = create_env(level_name)
+  return [i for i in range(env.action_space.n)]
+
 class PyProcessAtari(object):
 
     def __init__(self, env_id, config):
@@ -76,7 +80,7 @@ class PyProcessAtari(object):
         obs, reward, is_done, info = self._env.step(action)
         
       if is_done:
-        obs = self.reset() 
+        obs = self._reset() 
 
       reward = np.float32(reward)
       obs = self._transpose_obs(obs)
