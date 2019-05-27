@@ -65,8 +65,8 @@ flags.DEFINE_string('level_name', 'SeaquestNoFrameskip-v4', 'level name')
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
 flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
 flags.DEFINE_float('discounting', .99, 'Discounting factor.')
-# flags.DEFINE_enum('reward_clipping', 'None', ['abs_one', 'soft_asymmetric'],
-#                   'Reward clipping.')
+flags.DEFINE_enum('reward_clipping', 'abs_one', ['abs_one', 'soft_asymmetric'],
+                  'Reward clipping.')
 flags.DEFINE_float('gradient_clipping', 40.0, 'Negative means no clipping')
 
 # Optimizer settings.
@@ -199,7 +199,7 @@ def build_actor(agent, env, level_name, action_set):
     # No backpropagation should be done here.
     return nest.map_structure(tf.stop_gradient, output)
 
-def build_learner(agent, env_outputs, agent_outputs, env_id, global_step):
+def build_learner(agent, env_outputs, agent_outputs, env_id):
   """Builds the learner loop.
 
   Args:
@@ -270,7 +270,7 @@ def build_learner(agent, env_outputs, agent_outputs, env_id, global_step):
         target_policy_logits=learner_outputs.policy_logits,
         actions=agent_outputs.action,
         discounts=discounts,
-        rewards=rewards,
+        rewards=clipped_rewards,
         un_normalized_values=learner_outputs.un_normalized_vf,
         normalized_values=learner_outputs.normalized_vf,
         mean=game_specific_mean,
@@ -315,7 +315,7 @@ def build_learner(agent, env_outputs, agent_outputs, env_id, global_step):
     # print("VARIABLES: ", variables)
     gradients, _ = tf.clip_by_global_norm(gradients, FLAGS.gradient_clipping)
     print("GRADIENTS: ", gradients)
-    train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
+    train_op = optimizer.apply_gradients(zip(gradients, variables))
   else:
     train_op = optimizer.minimize(total_loss)
 
@@ -395,11 +395,10 @@ def train(action_set, level_names):
   # Only used to find the actor output structure.
   Agent = agent_factory(FLAGS.agent_name)
   with tf.Graph().as_default():
-    specific_atari_game = level_names[0]
-    env = create_atari_environment(specific_atari_game, seed=1)
+    env = create_atari_environment(level_names[0], seed=1)
     agent = Agent(len(action_set))
 
-    structure = build_actor(agent, env, specific_atari_game, action_set)
+    structure = build_actor(agent, env, level_names[0], action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
@@ -407,7 +406,7 @@ def train(action_set, level_names):
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/gpu'), \
        pin_global_variables(global_variable_device):
-    tf.set_random_seed(1)  # Makes initialization deterministic.
+    tf.set_random_seed(FLAGS.seed)  # Makes initialization deterministic.
 
     # Create Queue and Agent on the learner.
     with tf.device(shared_job_device):
@@ -436,7 +435,7 @@ def train(action_set, level_names):
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
-        tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
+        # tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
         actor_output = build_actor(agent, env, level_name, action_set)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -450,7 +449,7 @@ def train(action_set, level_names):
     # Build learner.
     if is_learner:
       # Create global step, which is the number of environment frames processed.
-      global_step = tf.get_variable(
+      tf.get_variable(
           'num_environment_frames',
           initializer=tf.zeros_initializer(),
           shape=[],
@@ -495,20 +494,18 @@ def train(action_set, level_names):
         output = build_learner(agent,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs,
-                               level_names_index,
-                               global_step=global_step)
+                               level_names_index)
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters) 
     config.gpu_options.allow_growth = True
-    config.gpu_options.per_process_gpu_memory_fraction = 0.8
-    logdir = "multi-task-test"
+    # config.gpu_options.per_process_gpu_memory_fraction = 0.8
     
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
-        checkpoint_dir=logdir,
+        checkpoint_dir=FLAGS.logdir,
         save_checkpoint_secs=600,
         save_summaries_secs=30,
         log_step_count_steps=50000,
@@ -519,7 +516,6 @@ def train(action_set, level_names):
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
         # total_level_returns = {level_name: 0.0 for level_name in level_names}
-        # TODO: Needed for now? 
         summary_dir = os.path.join(FLAGS.logdir, "logging")
         summary_writer = tf.summary.FileWriterCache.get(summary_dir)
 
@@ -550,8 +546,8 @@ def train(action_set, level_names):
 
             episode_frames = episode_step * FLAGS.num_action_repeats
 
-            tf.logging.info('Level: %s Episode return: %f after %d frames',
-                            level_name, episode_return, num_env_frames_v)
+            tf.logging.info('Level: %s Episode return: %f Acc return: %f after %d frames',
+                            level_name, episode_return, acc_episode_reward, num_env_frames_v)
             print('game: {} mean: {} \n std: {}'.format(game_id[level_name], mean[game_id[level_name]], std[game_id[level_name]]))
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
