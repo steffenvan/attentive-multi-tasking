@@ -32,7 +32,7 @@ nest = tf.contrib.framework.nest
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
 
-flags.DEFINE_string('logdir', '/tmp/agent', 'TensorFlow log directory.')
+flags.DEFINE_string('logdir', 'impala', 'TensorFlow log directory.')
 flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 
 # Flags used for testing.
@@ -552,7 +552,7 @@ def train(action_set, level_names):
 
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
-#            print('mean: {} \n std: {}'.format(mean[game_id[level_name]], std))
+            print('game: {} mean: {} \n std: {}'.format(game_id[level_name], mean[game_id[level_name]], std[game_id[level_name]]))
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
@@ -572,8 +572,7 @@ def train(action_set, level_names):
 
             # tf.logging.info('total return %f last %d frames', 
             #                 total_episode_return, average_frames)
-          current_episode_return_list = min(map(len, level_returns.values())) 
-          if current_episode_return_list >= 1:
+          if min(map(len, level_returns.values())) >= 1:
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
             cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
@@ -616,27 +615,17 @@ def train(action_set, level_names):
 
 def test(action_set, level_names):
   """Test."""
-  def is_single_game():
-    return len(level_names) < 2
+
   Agent = agent_factory(FLAGS.agent_name)
-  if is_single_game():
-    level_name = one(level_names)
-    level_returns = {level_name: []}
-  else:
-    level_returns = {level_name: [] for level_name in level_names}
+  level_returns = {level_name: [] for level_name in level_names}
   with tf.Graph().as_default():
-    outputs = {}
     agent = Agent(len(action_set))
-    if is_single_game():
+    outputs = {}
+    for level_name in level_names:
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
-    # TODO: For multiple agents at once 
-    else: 
-      for level_name in level_names:
-        env = create_atari_environment(level_name, seed=1, is_test=True)
-        outputs[level_name] = build_actor(agent, env, level_name, action_set)
 
-    logdir = os.path.join(FLAGS.logdir, level_name)
+    logdir = "impala"
     # tf.logging.info("LOGDIR IS: {}".format(logdir))
     with tf.train.SingularMonitoredSession(
         checkpoint_dir=logdir,
@@ -666,11 +655,12 @@ def test(action_set, level_names):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = atari_environment.ATARI_ACTION_SET
+    test_action_set = atari_environment.get_action_set(FLAGS.level_name)
 
     if FLAGS.mode == 'train':
       train(action_set, games) 
     else:
-      test(action_set, [FLAGS.level_name])
+      test(test_action_set, [FLAGS.level_name])
 
 if __name__ == '__main__':
     tf.app.run()    
