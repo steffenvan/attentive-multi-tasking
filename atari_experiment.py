@@ -32,7 +32,7 @@ nest = tf.contrib.framework.nest
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
 
-flags.DEFINE_string('logdir', 'impala', 'TensorFlow log directory.')
+flags.DEFINE_string('logdir', 'popart-multi-task', 'TensorFlow log directory.')
 flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 
 # Flags used for testing.
@@ -250,12 +250,12 @@ def build_learner(agent, env_outputs, agent_outputs, env_id, global_step):
       lambda t: t[1:], env_outputs)
   learner_outputs = nest.map_structure(lambda t: t[:-1], learner_outputs)
 
-  # if FLAGS.reward_clipping == 'abs_one':
-  #   clipped_rewards = tf.clip_by_value(rewards, -1, 1)
-  # elif FLAGS.reward_clipping == 'soft_asymmetric':
-  #   squeezed = tf.tanh(rewards / 5.0)
-  #   # Negative rewards are given less weight than positive rewards.
-  #   clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
+  if FLAGS.reward_clipping == 'abs_one':
+    clipped_rewards = tf.clip_by_value(rewards, -1, 1)
+  elif FLAGS.reward_clipping == 'soft_asymmetric':
+    squeezed = tf.tanh(rewards / 5.0)
+    # Negative rewards are given less weight than positive rewards.
+    clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
 
   discounts = tf.to_float(~done) * FLAGS.discounting
   game_specific_mean = tf.gather(agent._mean, env_id)
@@ -518,7 +518,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
-        total_level_returns = {level_name: 0.0 for level_name in level_names}
+        # total_level_returns = {level_name: 0.0 for level_name in level_names}
         # TODO: Needed for now? 
         summary_dir = os.path.join(FLAGS.logdir, "logging")
         summary_writer = tf.summary.FileWriterCache.get(summary_dir)
@@ -592,20 +592,20 @@ def train(action_set, level_names):
 
             # Clear level scores.
             # Add the episode returns before resetting for logging purposes. 
-            level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
-            for level_name in level_names:
-              total_level_returns[level_name] += level_returns[level_name]
+            # level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
+            # for level_name in level_names:
+            #   total_level_returns[level_name] += level_returns[level_name]
                       
             level_returns = {level_name: [] for level_name in level_names}
 
           # Calculate total reward after last X frames
-          if total_episode_frames % average_frames == 0:
-            for level_name in level_names: 
-              outputs = os.path.join("outputs", level_name + ".txt")
-              with open(outputs, "a+") as f:
-                f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
-              total_level_returns[level_name] = 0.0
-            total_episode_frames = 0
+          # if total_episode_frames % average_frames == 0:
+          #   for level_name in level_names: 
+          #     outputs = os.path.join("outputs", level_name + ".txt")
+          #     with open(outputs, "a+") as f:
+          #       f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
+          #     total_level_returns[level_name] = 0.0
+          #   total_episode_frames = 0
 
       else:
         # Execute actors (they just need to enqueue their output).
@@ -625,7 +625,7 @@ def test(action_set, level_names):
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
 
-    logdir = "impala"
+    logdir = "multi-task"
     # tf.logging.info("LOGDIR IS: {}".format(logdir))
     with tf.train.SingularMonitoredSession(
         checkpoint_dir=logdir,
