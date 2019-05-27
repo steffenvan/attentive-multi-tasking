@@ -17,8 +17,69 @@ import utilities_atari
 # from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
 nest = tf.contrib.framework.nest
+#AgentOutput = collections.namedtuple('AgentOutput',
+#                                     'action policy_logits un_normalized_vf normalized_vf')
 AgentOutput = collections.namedtuple('AgentOutput',
-                                     'action policy_logits un_normalized_vf normalized_vf')
+                                             'action policy_logits baseline')
+class ImpalaFeedForwardAgent(snt.AbstractModule):
+  """Agent with Simple CNN."""
+
+  def __init__(self, num_actions):
+    super(ImpalaFeedForwardAgent, self).__init__(name='impala_feed_forward_agent')
+
+    self._num_actions = num_actions
+
+  def _torso(self, input_):
+    last_action, env_output = input_
+    reward, _, _, frame = env_output
+
+    frame = tf.to_float(frame)
+    frame /= 255
+
+    with tf.variable_scope('convnet'):
+      conv_out = frame
+      conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+
+    conv_out = tf.nn.relu(conv_out)
+    conv_out = snt.BatchFlatten()(conv_out)
+    conv_out = snt.Linear(256)(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+
+    # Append clipped last reward and one hot last action.
+    clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
+    one_hot_last_action = tf.one_hot(last_action, self._num_actions)
+    return tf.concat(
+        [conv_out, clipped_reward, one_hot_last_action],
+        axis=1)
+
+  def _head(self, core_output):
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(
+        core_output)
+    baseline = tf.squeeze(snt.Linear(1, name='baseline')(core_output), axis=-1)
+
+    # Sample an action from the policy.
+    new_action = tf.multinomial(policy_logits, num_samples=1,
+                                output_dtype=tf.int32)
+    new_action = tf.squeeze(new_action, 1, name='new_action')
+
+    return AgentOutput(new_action, policy_logits, baseline)
+
+  def _build(self, input_):
+    action, env_output = input_
+    actions, env_outputs = nest.map_structure(lambda t: tf.expand_dims(t, 0),
+                                              (action, env_output))
+    outputs = self.unroll(actions, env_outputs)
+    return nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
+
+  @snt.reuse_variables
+  def unroll(self, actions, env_outputs):
+    _, _, done, _ = env_outputs
+
+    torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
+
+    return snt.BatchApply(self._head)(torso_outputs)
 
 def res_net_convolution(frame):
     for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
@@ -48,6 +109,8 @@ def shallow_convolution(frame):
     conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
     return conv_out
 
+
+
 class FeedForwardAgent(snt.AbstractModule):
     def __init__(self, num_actions):
         super(FeedForwardAgent, self).__init__(name="feed_forward_agent")
@@ -71,7 +134,8 @@ class FeedForwardAgent(snt.AbstractModule):
        
         # Using ResNet for multi-task learning as described in the paper.  
         with tf.variable_scope('convnet'):
-             conv_out = res_net_convolution(frame)
+            conv_out = shallow_convolution(frame)
+    #         conv_out = res_net_convolution(frame)
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.BatchFlatten()(conv_out)
         conv_out = snt.Linear(256)(conv_out)
@@ -253,6 +317,7 @@ class LSTMAgent(snt.RNNCore):
 def agent_factory(agent_name):
   specific_agent = {
     'FeedForwardAgent'.lower(): FeedForwardAgent,
+    'ImpalaFeedForwardAgent'.lower(): ImpalaFeedForwardAgent,
     'LSTMAgent'.lower(): LSTMAgent,
   }
 
