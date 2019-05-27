@@ -17,10 +17,12 @@ import utilities_atari
 # from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
 nest = tf.contrib.framework.nest
-#AgentOutput = collections.namedtuple('AgentOutput',
-#                                     'action policy_logits un_normalized_vf normalized_vf')
 AgentOutput = collections.namedtuple('AgentOutput',
+                                    'action policy_logits un_normalized_vf normalized_vf')
+ImpalaAgentOutput = collections.namedtuple('AgentOutput',
                                              'action policy_logits baseline')
+# AgentOutput = collections.namedtuple('AgentOutput',
+                                            #  'action policy_logits baseline')
 class ImpalaFeedForwardAgent(snt.AbstractModule):
   """Agent with Simple CNN."""
 
@@ -64,7 +66,7 @@ class ImpalaFeedForwardAgent(snt.AbstractModule):
                                 output_dtype=tf.int32)
     new_action = tf.squeeze(new_action, 1, name='new_action')
 
-    return AgentOutput(new_action, policy_logits, baseline)
+    return ImpalaAgentOutput(new_action, policy_logits, baseline)
 
   def _build(self, input_):
     action, env_output = input_
