@@ -33,9 +33,8 @@ StepOutputInfo = collections.namedtuple('StepOutputInfo',
                                         'episode_return episode_step acc_episode_reward acc_episode_step')
 StepOutput = collections.namedtuple('StepOutput',
                                     'reward info done observation')
-ATARI_ACTION_SET = ('NOOP', 'FIRE', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT', 
-                    'UPFIRE', 'RIGHTFIRE', 'LEFTFIRE', 'DOWNFIRE', 'UPRIGHTFIRE', 'UPLEFTFIRE', 'DOWNRIGHTFIRE', 'DOWNLEFTFIRE')
 
+action_set = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ,15 ,16 ,17]
 # To convert the shape from (84, 84, 4) -> (4, 84, 84)
 class TransposeWrapper(gym.ObservationWrapper):
   def observation(self, observation):
@@ -79,9 +78,10 @@ class PyProcessAtari(object):
       else: 
         obs, reward, is_done, info = self._env.step(action)
         
+      self._env.render()
       if is_done:
         obs = self._reset() 
-
+      
       reward = np.float32(reward)
       obs = self._transpose_obs(obs)
       acc_raw_reward = np.float32(info['acc_raw_reward'])
