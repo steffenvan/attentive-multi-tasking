@@ -111,7 +111,23 @@ def shallow_convolution(frame):
     conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
     return conv_out
 
+def bigger_shallow_convolution(frame):
+      conv_out = frame
+      conv_out = snt.Conv2D(32, 8, stride=4)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      conv_out = snt.Conv2D(64, 4, stride=2)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      conv_out = snt.Conv2D(64, 3, stride=1)(conv_out)
+      return conv_out
 
+def pnn_convolution(frame):
+    conv_out = frame
+    conv_out = snt.Conv2D(12, 8, stride=4)(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+    conv_out = snt.Conv2D(12, 4, stride=2)(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+    conv_out = snt.Conv2D(12, 3, stride=1)(conv_out)
+    return conv_out
 
 class FeedForwardAgent(snt.AbstractModule):
     def __init__(self, num_actions):
@@ -133,20 +149,19 @@ class FeedForwardAgent(snt.AbstractModule):
         # Convert to floats.
         frame = tf.to_float(frame)
         frame /= 255
-       
-        # Using ResNet for multi-task learning as described in the paper.  
+
+        # Matching PNN's architecture       
         with tf.variable_scope('convnet'):
-            conv_out = shallow_convolution(frame)
-    #         conv_out = res_net_convolution(frame)
+            conv_out = pnn_convolution(frame)
+
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.BatchFlatten()(conv_out)
         conv_out = snt.Linear(256)(conv_out)
         conv_out = tf.nn.relu(conv_out)
 
-        # clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
+        clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
         one_hot_last_action = tf.one_hot(last_action, self._num_actions)
-        reward = tf.expand_dims(reward, -1)
-        output = tf.concat([conv_out, reward, one_hot_last_action], axis=1)
+        output = tf.concat([conv_out, clipped_reward, one_hot_last_action], axis=1)
         return output
 
     def _head(self, torso_output):
