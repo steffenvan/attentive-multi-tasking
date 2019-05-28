@@ -23,6 +23,54 @@ ImpalaAgentOutput = collections.namedtuple('AgentOutput',
                                              'action policy_logits baseline')
 # AgentOutput = collections.namedtuple('AgentOutput',
                                             #  'action policy_logits baseline')
+
+def shallow_convolution(frame):
+    conv_out = frame
+    conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+    conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+    return conv_out
+
+
+def res_net_convolution(frame):
+    for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
+        # Downscale.
+        conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(frame)
+        conv_out = tf.nn.pool(
+        conv_out,
+        window_shape=[3, 3],
+        pooling_type='MAX',
+        padding='SAME',
+        strides=[2, 2])
+        # Residual block(s).
+        for j in range(num_blocks):
+            with tf.variable_scope('residual_%d_%d' % (i, j)):
+                block_input = conv_out
+                conv_out = tf.nn.relu(conv_out)
+                conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                conv_out = tf.nn.relu(conv_out)
+                conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                conv_out += block_input
+    return conv_out
+
+def bigger_shallow_convolution(frame):
+      conv_out = frame
+      conv_out = snt.Conv2D(32, 8, stride=4)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      conv_out = snt.Conv2D(64, 4, stride=2)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      conv_out = snt.Conv2D(64, 3, stride=1)(conv_out)
+      return conv_out
+
+def pnn_convolution(frame):
+    conv_out = frame
+    conv_out = snt.Conv2D(12, 8, stride=4)(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+    conv_out = snt.Conv2D(12, 4, stride=2)(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+    conv_out = snt.Conv2D(12, 3, stride=1)(conv_out)
+    return conv_out
+
 class ImpalaFeedForwardAgent(snt.AbstractModule):
   """Agent with Simple CNN."""
 
@@ -57,8 +105,7 @@ class ImpalaFeedForwardAgent(snt.AbstractModule):
         axis=1)
 
   def _head(self, core_output):
-    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(
-        core_output)
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output)
     baseline = tf.squeeze(snt.Linear(1, name='baseline')(core_output), axis=-1)
 
     # Sample an action from the policy.
@@ -82,52 +129,6 @@ class ImpalaFeedForwardAgent(snt.AbstractModule):
     torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
 
     return snt.BatchApply(self._head)(torso_outputs)
-
-def res_net_convolution(frame):
-    for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
-        # Downscale.
-        conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(frame)
-        conv_out = tf.nn.pool(
-        conv_out,
-        window_shape=[3, 3],
-        pooling_type='MAX',
-        padding='SAME',
-        strides=[2, 2])
-        # Residual block(s).
-        for j in range(num_blocks):
-            with tf.variable_scope('residual_%d_%d' % (i, j)):
-                block_input = conv_out
-                conv_out = tf.nn.relu(conv_out)
-                conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-                conv_out = tf.nn.relu(conv_out)
-                conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
-                conv_out += block_input
-    return conv_out
-
-def shallow_convolution(frame):
-    conv_out = frame
-    conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
-    conv_out = tf.nn.relu(conv_out)
-    conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
-    return conv_out
-
-def bigger_shallow_convolution(frame):
-      conv_out = frame
-      conv_out = snt.Conv2D(32, 8, stride=4)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      conv_out = snt.Conv2D(64, 4, stride=2)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      conv_out = snt.Conv2D(64, 3, stride=1)(conv_out)
-      return conv_out
-
-def pnn_convolution(frame):
-    conv_out = frame
-    conv_out = snt.Conv2D(12, 8, stride=4)(conv_out)
-    conv_out = tf.nn.relu(conv_out)
-    conv_out = snt.Conv2D(12, 4, stride=2)(conv_out)
-    conv_out = tf.nn.relu(conv_out)
-    conv_out = snt.Conv2D(12, 3, stride=1)(conv_out)
-    return conv_out
 
 class FeedForwardAgent(snt.AbstractModule):
     def __init__(self, num_actions):
