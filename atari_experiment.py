@@ -32,7 +32,7 @@ nest = tf.contrib.framework.nest
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
 
-flags.DEFINE_string('logdir', 'popart-multi-task', 'TensorFlow log directory.')
+flags.DEFINE_string('logdir', 'popart-multi', 'TensorFlow log directory.')
 flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 
 # Flags used for testing.
@@ -43,23 +43,21 @@ flags.DEFINE_integer('task', -1, 'Task id. Use -1 for local training.')
 flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
                   'Job name. Ignored when task is set to -1.')
 
-# Agent
-flags.DEFINE_string('agent_name', 'FeedForwardAgent', 'Which learner to use')
-
-# Atari environments
+# Environment settings
 flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
 
-# Environment settings
+# Train settings
 flags.DEFINE_integer('total_environment_frames', int(5e8),
                      'Total environment frames to train for.')
-flags.DEFINE_integer('num_actors', 16, 'Number of actors.')
-flags.DEFINE_integer('batch_size', 8, 'Batch size for training.')
-flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
+flags.DEFINE_integer('num_actors', 10, 'Number of actors.')
+flags.DEFINE_integer('batch_size', 1, 'Batch size for training.')
+flags.DEFINE_integer('unroll_length', 80, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
+flags.DEFINE_integer('queue_capacity', 1, 'tensorflow queue capacity')
 flags.DEFINE_string('level_name', 'SeaquestNoFrameskip-v4', 'level name')
-# flags.DEFINE_string('all_games', ['SeaquestNoFrameskip-v4', 'BreakoutNoFrameskip-v4'], 'all games')
+flags.DEFINE_string('agent_name', 'FeedForwardAgent', 'Which learner to use')
 
 # Loss settings.
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
@@ -89,6 +87,7 @@ games = utilities_atari.ATARI_GAMES.keys()
 for i, game in enumerate(games):
   game_id[game] = i
 
+print("GAMES: ", game_id)
 def is_single_machine():
     return FLAGS.task == -1
 
@@ -393,6 +392,10 @@ def train(action_set, level_names):
     filters = [shared_job_device, local_job_device]
 
   # Only used to find the actor output structure.
+  config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters) 
+  if is_learner:
+    config.gpu_options.allow_growth = True
+  
   Agent = agent_factory(FLAGS.agent_name)
   with tf.Graph().as_default():
     env = create_atari_environment(level_names[0], seed=1)
@@ -409,7 +412,7 @@ def train(action_set, level_names):
 
     # Create Queue and Agent on the learner.
     with tf.device(shared_job_device):
-      queue = tf.FIFOQueue(1, dtypes, shapes, shared_name='buffer')
+      queue = tf.FIFOQueue(FLAGS.queue_capacity, dtypes, shapes, shared_name='buffer')
       agent = Agent(len(action_set))
 
       if is_single_machine() and 'dynamic_batching' in sys.modules:
@@ -485,7 +488,6 @@ def train(action_set, level_names):
         # Converting the tensor of level names to a normal integer used for indexing. 
         level_names_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32)
         level_names_index = tf.reshape(level_names_index, [FLAGS.batch_size])
-
         # If LSTM agent, we use the hidden states
         # if hasattr(data_from_actors, 'agent_state'):
         #   agent_state = data_from_actors.agent_state
@@ -498,8 +500,6 @@ def train(action_set, level_names):
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
-    config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters) 
-    config.gpu_options.allow_growth = True
     # config.gpu_options.per_process_gpu_memory_fraction = 0.8
     
     with tf.train.MonitoredTrainingSession(
@@ -515,7 +515,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
-        # total_level_returns = {level_name: 0.0 for level_name in level_names}
+        total_level_returns = {level_name: 0.0 for level_name in level_names}
         summary_dir = os.path.join(FLAGS.logdir, "logging")
         summary_writer = tf.summary.FileWriterCache.get(summary_dir)
 
@@ -529,12 +529,13 @@ def train(action_set, level_names):
         
         # Log the total return every *average_frames*.  
         average_frames = 24000 
-        total_episode_return = 0.0
+        # total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, mean, _, std, _ = session.run(
               (data_from_actors.level_name,) + output + (agent._std, ) + (stage_op,))
 
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
+          # print("LEVEL NAMES: ", level_names_v)
           total_episode_frames = num_env_frames_v
 
           for level_name, episode_return, episode_step, acc_episode_reward, acc_episode_step in zip(
@@ -548,7 +549,7 @@ def train(action_set, level_names):
 
             tf.logging.info('Level: %s Episode return: %f Acc return: %f after %d frames',
                             level_name, episode_return, acc_episode_reward, num_env_frames_v)
-            print('game: {} mean: {} \n std: {}'.format(game_id[level_name], mean[game_id[level_name]], std[game_id[level_name]]))
+            # print('game: {} mean: {} \n std: {}'.format(game_id[level_name], mean[game_id[level_name]], std[game_id[level_name]]))
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
@@ -569,21 +570,24 @@ def train(action_set, level_names):
             # tf.logging.info('total return %f last %d frames', 
             #                 total_episode_return, average_frames)
           if min(map(len, level_returns.values())) >= 1:
+            # for level_name
+            # print("Game: {} episode_return: {}".format(level_name, level_returns[level_name]))
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
             cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
-            if total_episode_frames % average_frames == 0:
-              with open("multi-actors-output.txt", "a+") as f:
-                  f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
-                  f.write("no cap: %f after %d frames\n" % (no_cap, num_env_frames_v))
-                  f.write("cap 100: %f after %d frames\n" % (cap_100, num_env_frames_v))
+            # if total_episode_frames % average_frames == 0:
+            #   with open("multi-actors-output.txt", "a+") as f:
+            #       # f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
+            #       f.write("no cap: %f after %d frames\n" % (no_cap, num_env_frames_v))
+            #       f.write("cap 100: %f after %d frames\n" % (cap_100, num_env_frames_v))
 
             summary = tf.summary.Summary()
             summary.value.add(
-                tag='atari/training_no_cap', simple_value=no_cap)
+                tag=(level_name + '/training_no_cap'), simple_value=no_cap)
             summary.value.add(
-                tag='atari/training_cap_100', simple_value=cap_100)
+                tag=(level_name + '/training_cap_100'), simple_value=cap_100)
+
             summary_writer.add_summary(summary, num_env_frames_v)
 
             # Clear level scores.
@@ -606,7 +610,6 @@ def train(action_set, level_names):
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
-          # print(session.run(enqueue_ops))
           session.run(enqueue_ops)
 
 def test(action_set, level_names):
