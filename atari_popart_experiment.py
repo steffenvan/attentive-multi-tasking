@@ -655,7 +655,7 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     # action_set = atari_environment.ATARI_ACTION_SET
     test_action_set = atari_environment.get_action_set(FLAGS.level_name)
-    action_set = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ,15 ,16 ,17]
+    action_set = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ,15 ,16, 17]
     if FLAGS.mode == 'train':
       train(action_set, games) 
     else:
