@@ -14,6 +14,8 @@ import sys
 import vtrace
 import numpy as np
 import utilities_atari
+
+import dmlab30_utilities
 # from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
 nest = tf.contrib.framework.nest
@@ -253,7 +255,7 @@ class LSTMAgent(snt.RNNCore):
     def __init__(self, num_actions):
         super(LSTMAgent, self).__init__(name="agent")
 
-        self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
+        self._number_of_games = len(dmlab30_utilities.LEVEL_MAPPING.keys())
         self._num_actions  = num_actions
         self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]), trainable=False)
         self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]), trainable=False)
