@@ -270,35 +270,84 @@ class LSTMAgent(snt.RNNCore):
     def initial_state(self, batch_size):
         init_state = self._core.zero_state(batch_size, tf.float32)
         return init_state
-            
+
+    def _instruction(self, instruction):
+        # Split string.
+        splitted = tf.string_split(instruction)
+        dense = tf.sparse_tensor_to_dense(splitted, default_value='')
+        length = tf.reduce_sum(tf.to_int32(tf.not_equal(dense, '')), axis=1)
+
+        # To int64 hash buckets. Small risk of having collisions. Alternatively, a
+        # vocabulary can be used.
+        num_hash_buckets = 1000
+        buckets = tf.string_to_hash_bucket_fast(dense, num_hash_buckets)
+
+        # Embed the instruction. Embedding size 20 seems to be enough.
+        embedding_size = 20
+        embedding = snt.Embed(num_hash_buckets, embedding_size)(buckets)
+
+        # Pad to make sure there is at least one output.
+        padding = tf.to_int32(tf.equal(tf.shape(embedding)[1], 0))
+        embedding = tf.pad(embedding, [[0, 0], [0, padding], [0, 0]])
+
+        core = tf.contrib.rnn.LSTMBlockCell(64, name='language_lstm')
+        output, _ = tf.nn.dynamic_rnn(core, embedding, length, dtype=tf.float32)
+
+        # Return last output.
+        return tf.reverse_sequence(output, length, seq_axis=1)[:, 0]
+
     def _torso(self, input_):
         last_action, env_output = input_
-        reward, _, _, frame = env_output
+        reward, _, _, (frame, instruction) = env_output
 
         # Convert to floats.
         frame = tf.to_float(frame)
         frame /= 255
         
         with tf.variable_scope('convnet'):
-            conv_out = res_net_convolution(frame)
+            conv_out = frame
+            for i, (num_ch, num_blocks) in enumerate([(16, 2), (32, 2), (32, 2)]):
+                # Downscale.
+                conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                conv_out = tf.nn.pool(
+                    conv_out,
+                    window_shape=[3, 3],
+                    pooling_type='MAX',
+                    padding='SAME',
+                    strides=[2, 2])
+
+                # Residual block(s).
+                for j in range(num_blocks):
+                    with tf.variable_scope('residual_%d_%d' % (i, j)):
+                        block_input = conv_out
+                        conv_out = tf.nn.relu(conv_out)
+                        conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                        conv_out = tf.nn.relu(conv_out)
+                        conv_out = snt.Conv2D(num_ch, 3, stride=1, padding='SAME')(conv_out)
+                        conv_out += block_input
+
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.BatchFlatten()(conv_out)
 
         conv_out = snt.Linear(256)(conv_out)
         conv_out = tf.nn.relu(conv_out)
 
+        instruction_out = self._instruction(instruction)
+
         # Append clipped last reward and one hot last action.
         clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
         one_hot_last_action = tf.one_hot(last_action, self._num_actions)
-        output = tf.concat([conv_out, clipped_reward, one_hot_last_action], axis=1)
-
-        return output 
+        return tf.concat(
+            [conv_out, clipped_reward, one_hot_last_action, instruction_out],
+            axis=1)
 
     # The last layer of the neural network
     def _head(self, core_output):
         policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output)
 
         linear = snt.Linear(self._number_of_games, name='baseline')
+        print(linear)
+        # print("WEIGHT: ", linear.w)
         normalized_vf = linear(core_output)
         un_normalized_vf = self._std * normalized_vf + self._mean
         # Sample an action from the policy.
@@ -352,7 +401,8 @@ class LSTMAgent(snt.RNNCore):
         Returns:
             A tuple of the updated first and second moments. 
         """
-        with tf.variable_scope("lstm_agent/batch_apply_unroll/baseline", reuse=True):
+
+        with tf.variable_scope("agent/batch_apply_1/baseline", reuse=True):
             weight = tf.get_variable("w")
             bias = tf.get_variable("b")
 

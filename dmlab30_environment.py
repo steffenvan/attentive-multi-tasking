@@ -5,12 +5,12 @@ from __future__ import print_function
 
 import collections
 import os.path
-from atari_wrappers import wrap_deepmind, make_atari
 
 import numpy as np
 import tensorflow as tf
-import dmlab30
+import dmlab30_utilities
 import gym
+import deepmind_lab
 
 nest = tf.contrib.framework.nest
 

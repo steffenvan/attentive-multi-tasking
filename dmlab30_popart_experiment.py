@@ -237,7 +237,7 @@ def build_learner(agent, agent_state, env_outputs, agent_outputs, env_id):
   def get_batch_value(batch):
     return tf.map_fn(get_single_game_info, (env_id, batch), dtype=tf.float32)
 
-  learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
+  learner_outputs, _ = agent.unroll(agent_outputs.action, env_outputs, agent_state)
   un_normalized_vf = learner_outputs.un_normalized_vf
   normalized_vf   = learner_outputs.normalized_vf
 
@@ -583,3 +583,60 @@ def train(action_set, level_names):
         # Execute actors (they just need to enqueue their output).
         while True:
           session.run(enqueue_ops)
+
+def test(action_set, level_names):
+  """Test."""
+
+  level_returns = {level_name: [] for level_name in level_names}
+  Agent = agent_factory(FLAGS.agent_name)
+  with tf.Graph().as_default():
+    agent = Agent(len(action_set))
+    outputs = {}
+    for level_name in level_names:
+      env = create_environment(level_name, seed=1, is_test=True)
+      outputs[level_name] = build_actor(agent, env, level_name, action_set)
+
+    with tf.train.SingularMonitoredSession(
+        checkpoint_dir=FLAGS.logdir,
+        hooks=[py_process.PyProcessHook()]) as session:
+      for level_name in level_names:
+        tf.logging.info('Testing level: %s', level_name)
+        while True:
+          done_v, infos_v = session.run((
+              outputs[level_name].env_outputs.done,
+              outputs[level_name].env_outputs.info
+          ))
+          returns = level_returns[level_name]
+          returns.extend(infos_v.episode_return[1:][done_v[1:]])
+
+          if len(returns) >= FLAGS.test_num_episodes:
+            tf.logging.info('Mean episode return: %f', np.mean(returns))
+            break
+
+  if FLAGS.level_name == 'dmlab30':
+    no_cap = dmlab30_utilities.compute_human_normalized_score(level_returns,
+                                                    per_level_cap=None)
+    cap_100 = dmlab30_utilities.compute_human_normalized_score(level_returns,
+                                                     per_level_cap=100)
+    tf.logging.info('No cap.: %f Cap 100: %f', no_cap, cap_100)
+
+
+def main(_):
+  tf.logging.set_verbosity(tf.logging.INFO)
+
+  action_set = dmlab30_environment.DEFAULT_ACTION_SET
+  if FLAGS.level_name == 'dmlab30' and FLAGS.mode == 'train':
+    level_names = dmlab30_utilities.LEVEL_MAPPING.keys()
+  elif FLAGS.level_name == 'dmlab30' and FLAGS.mode == 'test':
+    level_names = dmlab30_utilities.LEVEL_MAPPING.values()
+  else:
+    level_names = [FLAGS.level_name]
+
+  if FLAGS.mode == 'train':
+    train(action_set, level_names)
+  else:
+    test(action_set, level_names)
+
+
+if __name__ == '__main__':
+  tf.app.run()
