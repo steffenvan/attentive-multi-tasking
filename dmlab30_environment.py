@@ -80,10 +80,7 @@ class PyProcessDmLab(object):
 
   def _observation(self):
     d = self._env.observations()
-    # print(d)
     obs_list = [d[k] for k in self._observation_spec] 
-     # print("Length of this: ", len(obs_list[0]))
-    # print("obs lsit: ", obs_list[0].shape)
     return obs_list
 
   def initial(self):
@@ -108,7 +105,6 @@ class PyProcessDmLab(object):
   @staticmethod
   def _tensor_specs(method_name, unused_kwargs, constructor_kwargs):
     """Returns a nest of `TensorSpec` with the method's output specification."""
-    print(constructor_kwargs)
     width = constructor_kwargs['config'].get('width', 320)
     height = constructor_kwargs['config'].get('height', 240)
 
