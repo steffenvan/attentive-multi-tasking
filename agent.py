@@ -257,10 +257,7 @@ class LSTMAgent(snt.RNNCore):
 
         self._number_of_games = len(dmlab30_utilities.LEVEL_MAPPING.keys())
         self._num_actions  = num_actions
-        self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]), trainable=False)
-        self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]), trainable=False)
-        self._std          = nest.map_structure(tf.stop_gradient, 
-                                                tf.sqrt(self._mean_squared - tf.square(self._mean)))
+
         self._beta         = 3e-4
         self._stable_rate  = 0.1
         self._epsilon      = 1e-4
@@ -268,6 +265,10 @@ class LSTMAgent(snt.RNNCore):
 
         with self._enter_variable_scope():
             self._core = tf.contrib.rnn.LSTMBlockCell(256)
+            self._mean         = tf.get_variable("mean", dtype=tf.float32, initializer=tf.tile(tf.constant([0.0]), multiples=[self._number_of_games]), trainable=False)
+            self._mean_squared = tf.get_variable("mean_squared", dtype=tf.float32, initializer=tf.tile(tf.constant([1.0]), multiples=[self._number_of_games]), trainable=False)
+            self._std          = nest.map_structure(tf.stop_gradient, 
+                                                tf.sqrt(self._mean_squared - tf.square(self._mean)))
 
     def initial_state(self, batch_size):
         init_state = self._core.zero_state(batch_size, tf.float32)
@@ -351,6 +352,8 @@ class LSTMAgent(snt.RNNCore):
         print(linear)
         # print("WEIGHT: ", linear.w)
         normalized_vf = linear(core_output)
+        print("VF: ", normalized_vf)
+        print(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
         un_normalized_vf = self._std * normalized_vf + self._mean
         # Sample an action from the policy.
         new_action = tf.multinomial(policy_logits, num_samples=1,
@@ -404,7 +407,7 @@ class LSTMAgent(snt.RNNCore):
             A tuple of the updated first and second moments. 
         """
 
-        with tf.variable_scope("agent/batch_apply_1/baseline", reuse=True):
+        with tf.variable_scope("agent/unroll/batch_apply_1/baseline", reuse=True):
             weight = tf.get_variable("w")
             bias = tf.get_variable("b")
 
