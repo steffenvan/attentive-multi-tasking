@@ -460,7 +460,7 @@ def train(action_set, level_names):
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters) 
     config.gpu_options.allow_growth = True
     # config.gpu_options.per_process_gpu_memory_fraction = 0.8
-    logdir = "impala-multi-task"
+    logdir = FLAGS.logdir
     
     with tf.train.MonitoredTrainingSession(
         server.target,
