@@ -78,7 +78,7 @@ class PyProcessAtari(object):
       else: 
         obs, reward, is_done, info = self._env.step(action)
         
-      self._env.render()
+#      self._env.render()
       if is_done:
         obs = self._reset() 
       
