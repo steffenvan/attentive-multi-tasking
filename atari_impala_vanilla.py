@@ -44,7 +44,7 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
                   'Job name. Ignored when task is set to -1.')
 
 # Agent
-flags.DEFINE_string('agent_name', 'ImpalaFeedForwardAgent', 'Which learner to use')
+flags.DEFINE_string('agent_name', 'ImpalaFeedForward', 'Which learner to use')
 
 # Atari environments
 flags.DEFINE_integer('width', 84, 'Width of observation')
