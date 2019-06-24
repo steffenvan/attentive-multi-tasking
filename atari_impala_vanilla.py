@@ -311,7 +311,7 @@ def create_atari_environment(env_id, seed, is_test=False):
     # https://github.com/deepmind/lab/blob/master/docs/users/python_api.md
     config['mixerSeed'] = 0x600D5EED
 
-  process = py_process.PyProcess(atari_environment.PyProcessAtari, env_id, config)
+  process = py_process.PyProcess(atari_environment.PyProcessAtari, env_id, config, seed)
   proxy_env = atari_environment.FlowEnvironment(process.proxy)
   return proxy_env
 
@@ -373,7 +373,7 @@ def train(action_set, level_names):
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/gpu'), \
        pin_global_variables(global_variable_device):
-    tf.set_random_seed(1)  # Makes initialization deterministic.
+    tf.set_random_seed(FLAGS.seed)  # Makes initialization deterministic.
 
     # Create Queue and Agent on the learner.
     with tf.device(shared_job_device):
@@ -402,7 +402,6 @@ def train(action_set, level_names):
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
         env = create_atari_environment(level_name, seed=i + 1)
-        tf.logging.info('Current game: {} with action set: {}'.format(level_name, action_set))
         actor_output = build_actor(agent, env, level_name, action_set)
         with tf.device(shared_job_device):
           enqueue_ops.append(queue.enqueue(nest.flatten(actor_output)))
@@ -546,27 +545,16 @@ def train(action_set, level_names):
 
 def test(action_set, level_names):
   """Test."""
-  def is_single_game():
-    return len(level_names) < 2
   Agent = agent_factory(FLAGS.agent_name)
-  if is_single_game():
-    level_name = one(level_names)
-    level_returns = {level_name: []}
-  else:
-    level_returns = {level_name: [] for level_name in level_names}
+  level_returns = {level_name: [] for level_name in level_names}
   with tf.Graph().as_default():
     outputs = {}
     agent = Agent(len(action_set))
-    if is_single_game():
+    for level_name in level_names:
       env = create_atari_environment(level_name, seed=1, is_test=True)
       outputs[level_name] = build_actor(agent, env, level_name, action_set)
-    # TODO: For multiple agents at once 
-    else: 
-      for level_name in level_names:
-        env = create_atari_environment(level_name, seed=1, is_test=True)
-        outputs[level_name] = build_actor(agent, env, level_name, action_set)
 
-    logdir = os.path.join(FLAGS.logdir, level_name)
+    logdir = FLAGS.logdir
     # tf.logging.info("LOGDIR IS: {}".format(logdir))
     with tf.train.SingularMonitoredSession(
         checkpoint_dir=logdir,
