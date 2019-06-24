@@ -71,6 +71,69 @@ def pnn_convolution(frame):
     conv_out = snt.Conv2D(12, 3, stride=1)(conv_out)
     return conv_out
 
+
+class ImpalaFFRelational(snt.AbstractModule):
+  """Agent with Simple CNN."""
+
+  def __init__(self, num_actions):
+    super(ImpalaFFRelational, self).__init__(name='impala_feed_forward_agent_relational')
+
+    self._num_actions = num_actions
+
+  def _torso(self, input_):
+    last_action, env_output = input_
+    reward, _, _, frame = env_output
+
+    frame = tf.to_float(frame)
+    frame /= 255
+
+    with tf.variable_scope('convnet'):
+      conv_out = frame
+      conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+
+    conv_out = tf.nn.relu(conv_out)
+    conv_out = tf.keras.layers.MaxPool2D(pool_size=(9, 9), padding='valid')(conv_out)
+    conv_out = tf.squeeze(conv_out, axis=[1, 2])
+    conv_out = snt.Linear(256)(conv_out)
+    conv_out = tf.nn.relu(conv_out)
+
+
+    # Append clipped last reward and one hot last action.
+    clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
+    one_hot_last_action = tf.one_hot(last_action, self._num_actions)
+    return tf.concat(
+        [conv_out, clipped_reward, one_hot_last_action],
+        axis=1)
+
+  def _head(self, core_output):
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output)
+    baseline = tf.squeeze(snt.Linear(1, name='baseline')(core_output), axis=-1)
+
+    # Sample an action from the policy.
+    new_action = tf.multinomial(policy_logits, num_samples=1,
+                                output_dtype=tf.int32)
+    new_action = tf.squeeze(new_action, 1, name='new_action')
+
+    return ImpalaAgentOutput(new_action, policy_logits, baseline)
+
+  def _build(self, input_):
+    action, env_output = input_
+    actions, env_outputs = nest.map_structure(lambda t: tf.expand_dims(t, 0),
+                                              (action, env_output))
+    outputs = self.unroll(actions, env_outputs)
+    return nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
+
+  @snt.reuse_variables
+  def unroll(self, actions, env_outputs):
+    _, _, done, _ = env_outputs
+    print("ENV OUTPUTS: ", env_outputs)
+    torso_outputs = snt.BatchApply(self._torso, name="batch_apply_torso")((actions, env_outputs))
+
+    return snt.BatchApply(self._head)(torso_outputs)
+
+
 class ImpalaFeedForward(snt.AbstractModule):
   """Agent with Simple CNN."""
 
@@ -93,9 +156,12 @@ class ImpalaFeedForward(snt.AbstractModule):
       conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
 
     conv_out = tf.nn.relu(conv_out)
+    conv_out = snt.BatchApply(tf.keras.layers.MaxPool2D(pool_size=(9, 9), padding='valid'))(conv_out)
     conv_out = snt.BatchFlatten()(conv_out)
     conv_out = snt.Linear(256)(conv_out)
     conv_out = tf.nn.relu(conv_out)
+
+    #### ------ #### 
 
     # Append clipped last reward and one hot last action.
     clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
@@ -539,6 +605,7 @@ def agent_factory(agent_name):
   specific_agent = {
     'ImpalaFeedForward'.lower(): ImpalaFeedForward,
     'PopArtFeedForward'.lower(): PopArtFeedForward,
+    'ImpalaFFRelational'.lower(): ImpalaFFRelational,
     'ImpalaLSTM'.lower(): ImpalaLSTM,
     'PopArtLSTM'.lower(): PopArtLSTM
   }
