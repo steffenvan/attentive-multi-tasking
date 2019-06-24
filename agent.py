@@ -71,7 +71,6 @@ def pnn_convolution(frame):
     conv_out = snt.Conv2D(12, 3, stride=1)(conv_out)
     return conv_out
 
-
 class ImpalaFFRelational(snt.AbstractModule):
   """Agent with Simple CNN."""
 
@@ -80,13 +79,31 @@ class ImpalaFFRelational(snt.AbstractModule):
 
     self._num_actions = num_actions
 
+    coord_list = []
+    self.n_entities = 11
+    for y in range(self.n_entities):
+        for x in range(self.n_entities):
+            coord_list.append(float(y))
+            coord_list.append(float(x))
+
+    self.coord_list = tf.constant(coord_list, shape=[1, self.n_entities, self.n_entities, 2], name="coord_list")
+
+
   def _torso(self, input_):
     last_action, env_output = input_
     reward, _, _, frame = env_output
-
     frame = tf.to_float(frame)
     frame /= 255
-
+    batch_size = tf.shape(frame)[0]
+    
+    h = 3
+    # TODO: Check whether the dimensions of the queries needs to be modified
+    d_q = 32
+    d_v = 32
+    q_dim = h * d_q
+    k_dim = h * d_q
+    v_dim = h * d_v
+    print("FRAME: ", frame)
     with tf.variable_scope('convnet'):
       conv_out = frame
       conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
@@ -94,7 +111,37 @@ class ImpalaFFRelational(snt.AbstractModule):
       conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
 
     conv_out = tf.nn.relu(conv_out)
-    conv_out = tf.keras.layers.MaxPool2D(pool_size=(9, 9), padding='valid')(conv_out)
+    conv_out = tf.concat([tf.broadcast_to(self.coord_list, [batch_size, self.n_entities, self.n_entities, 2]), conv_out], axis=3)
+    conv_out = tf.reshape(conv_out, [batch_size, self.n_entities*self.n_entities, 34])
+
+    
+    queries = snt.BatchApply(snt.Linear(q_dim))(conv_out)
+    keys    = snt.BatchApply(snt.Linear(k_dim))(conv_out)
+    values  = snt.BatchApply(snt.Linear(v_dim))(conv_out)
+
+    def extract_head(input_tensor, dim):
+        input_tensor = tf.reshape(input_tensor, [batch_size, self.n_entities*self.n_entities, h, dim])
+        input_tensor = tf.transpose(input_tensor, [0, 2, 1, 3])
+        input_tensor = tf.reshape(input_tensor, [batch_size * h, self.n_entities*self.n_entities, dim])
+        return input_tensor
+
+    queries = extract_head(queries, d_q)
+    keys    = extract_head(keys, d_q)
+    values  = extract_head(values, d_v)
+
+    dot_prod_attention = tf.matmul(queries, tf.transpose(keys, [0, 2, 1])) / tf.sqrt(float(d_q))
+    dot_prod_attention_sm = tf.nn.softmax(dot_prod_attention)
+    attention_qkv = tf.matmul(dot_prod_attention_sm, values)
+    attention_qkv = tf.reshape(attention_qkv, [batch_size, h, self.n_entities*self.n_entities, d_v])
+    attention_qkv = tf.transpose(attention_qkv, [0, 2, 1, 3])
+    attention_qkv = tf.reshape(attention_qkv, [batch_size, self.n_entities*self.n_entities, h*d_v])
+
+    entities_mods = snt.BatchApply(snt.nets.MLP([384, 384, 34]))(attention_qkv)
+    conv_out += entities_mods
+    # output_size = h * k * v
+    print("CONV OUT: ", conv_out)
+    conv_out = tf.reshape(conv_out, [batch_size, self.n_entities, self.n_entities, 34])
+    conv_out = tf.keras.layers.MaxPool2D(pool_size=(self.n_entities, self.n_entities), padding='valid')(conv_out)
     conv_out = tf.squeeze(conv_out, axis=[1, 2])
     conv_out = snt.Linear(256)(conv_out)
     conv_out = tf.nn.relu(conv_out)
@@ -128,7 +175,6 @@ class ImpalaFFRelational(snt.AbstractModule):
   @snt.reuse_variables
   def unroll(self, actions, env_outputs):
     _, _, done, _ = env_outputs
-    print("ENV OUTPUTS: ", env_outputs)
     torso_outputs = snt.BatchApply(self._torso, name="batch_apply_torso")((actions, env_outputs))
 
     return snt.BatchApply(self._head)(torso_outputs)
