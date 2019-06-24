@@ -114,7 +114,6 @@ class ImpalaFFRelational(snt.AbstractModule):
     conv_out = tf.concat([tf.broadcast_to(self.coord_list, [batch_size, self.n_entities, self.n_entities, 2]), conv_out], axis=3)
     conv_out = tf.reshape(conv_out, [batch_size, self.n_entities*self.n_entities, 34])
 
-    
     queries = snt.BatchApply(snt.Linear(q_dim))(conv_out)
     keys    = snt.BatchApply(snt.Linear(k_dim))(conv_out)
     values  = snt.BatchApply(snt.Linear(v_dim))(conv_out)
