@@ -60,8 +60,6 @@ class PyProcessAtari(object):
 
     def __init__(self, env_id, config, seed):
       self._env = create_env(env_id)
-      print("HELLO: ", self._env.seed(seed))
-      print(self._env)
       
     def _reset(self):
       return self._env.reset()
