@@ -60,8 +60,6 @@ flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
 flags.DEFINE_string('level_name', 'PongNoFrameskip-v4', 'level name')
 
-# flags.DEFINE_string('all_games', ['SeaquestNoFrameskip-v4', 'BreakoutNoFrameskip-v4'], 'all games')
-
 # Loss settings.
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
 flags.DEFINE_float('baseline_cost', .5, 'Baseline cost/multiplier.')
@@ -186,13 +184,6 @@ def build_actor(agent, env, level_name, action_set):
         lambda first, rest: tf.concat([[first], rest], 0),
         (first_agent_output, first_env_output), (agent_outputs, env_outputs))
 
-    # Removed for now 
-    # Use the extra state information if it's the LSTM agent
-    # if hasattr(initial_agent_state, 'c') and hasattr(initial_agent_state, 'h'):
-    #   output = ActorOutput(
-    #       level_name=level_name, agent_state=first_agent_state,
-    #       env_outputs=full_env_outputs, agent_outputs=full_agent_outputs)
-    
     output = ActorOutputFeedForward(
         level_name=level_name, 
         env_outputs=full_env_outputs,
@@ -474,9 +465,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
-        # total_level_returns = {level_name: 0.0 for level_name in level_names}
-        summary_dir = os.path.join(logdir, "logging")
-        summary_writer = tf.summary.FileWriterCache.get(summary_dir)
+        summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
 
         # Prepare data for first run.
         session.run_step_fn(
@@ -525,17 +514,21 @@ def train(action_set, level_names):
             #                 total_episode_return, average_frames)
           current_episode_return_list = min(map(len, level_returns.values())) 
           if current_episode_return_list >= 1:
+            level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
+            for level_name in level_names:
+              total_level_returns[level_name] += level_returns[level_name]
+                      
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
             cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
-
             summary = tf.summary.Summary()
             summary.value.add(
-                tag='atari/training_no_cap', simple_value=no_cap)
+                tag=(level_name + '/training_no_cap'), simple_value=no_cap)
             summary.value.add(
-                tag='atari/training_cap_100', simple_value=cap_100)
-            summary_writer.add_summary(summary, num_env_frames_v)
+                tag=(level_name + '/training_cap_100'), simple_value=cap_100)
+            summary.value.add(
+                tag=(level_name + '/total_level_return'), simple_value=total_level_returns[level_name])
                       
             level_returns = {level_name: [] for level_name in level_names}
       else:
@@ -585,7 +578,6 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ,15 ,16, 17] 
     level_names = games
-    print(level_names)
     if FLAGS.mode == 'train':
       train(action_set, level_names) 
     else:

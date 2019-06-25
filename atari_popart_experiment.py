@@ -563,50 +563,32 @@ def train(action_set, level_names):
                               simple_value=mean[game_id[level_name]])
             summary.value.add(tag=level_name + '/env_std',
                               simple_value=std[game_id[level_name]])
+
             summary_writer.add_summary(summary, num_env_frames_v)
 
             level_returns[level_name].append(episode_return)
-
-            # tf.logging.info('total return %f last %d frames', 
-            #                 total_episode_return, average_frames)
           if min(map(len, level_returns.values())) >= 1:
-            # for level_name
-            # print("Game: {} episode_return: {}".format(level_name, level_returns[level_name]))
+            # Add the episode returns before resetting for logging purposes. 
+            level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
+            for level_name in level_names:
+              total_level_returns[level_name] += level_returns[level_name]
+                      
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
             cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
-            # if total_episode_frames % average_frames == 0:
-            #   with open("multi-actors-output.txt", "a+") as f:
-            #       # f.write("total_return %f last %d frames\n" % (total_episode_return, average_frames))
-            #       f.write("no cap: %f after %d frames\n" % (no_cap, num_env_frames_v))
-            #       f.write("cap 100: %f after %d frames\n" % (cap_100, num_env_frames_v))
-
             summary = tf.summary.Summary()
             summary.value.add(
                 tag=(level_name + '/training_no_cap'), simple_value=no_cap)
             summary.value.add(
                 tag=(level_name + '/training_cap_100'), simple_value=cap_100)
+            summary.value.add(
+                tag=(level_name + '/total_level_return'), simple_value=total_level_returns[level_name])
 
             summary_writer.add_summary(summary, num_env_frames_v)
 
-            # Clear level scores.
-            # Add the episode returns before resetting for logging purposes. 
-            # level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
-            # for level_name in level_names:
-            #   total_level_returns[level_name] += level_returns[level_name]
-                      
+
             level_returns = {level_name: [] for level_name in level_names}
-
-          # Calculate total reward after last X frames
-          # if total_episode_frames % average_frames == 0:
-          #   for level_name in level_names: 
-          #     outputs = os.path.join("outputs", level_name + ".txt")
-          #     with open(outputs, "a+") as f:
-          #       f.write("%s: total episode return: %f last %d frames\n" % (level_name, total_level_returns[level_name], num_env_frames_v))
-          #     total_level_returns[level_name] = 0.0
-          #   total_episode_frames = 0
-
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
