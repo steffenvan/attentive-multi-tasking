@@ -465,6 +465,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
+        total_level_returns = {level_name: 0.0 for level_name in level_names}
         summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
 
         # Prepare data for first run.
@@ -531,6 +532,7 @@ def train(action_set, level_names):
                 tag=(level_name + '/total_level_return'), simple_value=total_level_returns[level_name])
                       
             level_returns = {level_name: [] for level_name in level_names}
+            total_level_returns = {level_name: 0.0 for level_name in level_names}
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
