@@ -72,7 +72,7 @@ def pnn_convolution(frame):
     return conv_out
 
 class ImpalaFFRelational(snt.AbstractModule):
-  """Agent with Simple CNN."""
+  """."""
 
   def __init__(self, num_actions):
     super(ImpalaFFRelational, self).__init__(name='impala_feed_forward_agent_relational')
@@ -103,7 +103,7 @@ class ImpalaFFRelational(snt.AbstractModule):
     q_dim = h * d_q
     k_dim = h * d_q
     v_dim = h * d_v
-    print("FRAME: ", frame)
+
     with tf.variable_scope('convnet'):
       conv_out = frame
       conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
@@ -130,15 +130,18 @@ class ImpalaFFRelational(snt.AbstractModule):
 
     dot_prod_attention = tf.matmul(queries, tf.transpose(keys, [0, 2, 1])) / tf.sqrt(float(d_q))
     dot_prod_attention_sm = tf.nn.softmax(dot_prod_attention)
+
+    # softmax(Q, K^T) * V
     attention_qkv = tf.matmul(dot_prod_attention_sm, values)
     attention_qkv = tf.reshape(attention_qkv, [batch_size, h, self.n_entities*self.n_entities, d_v])
     attention_qkv = tf.transpose(attention_qkv, [0, 2, 1, 3])
     attention_qkv = tf.reshape(attention_qkv, [batch_size, self.n_entities*self.n_entities, h*d_v])
 
-    entities_mods = snt.BatchApply(snt.nets.MLP([384, 384, 34]))(attention_qkv)
+    # Creating fully connected layers before the residual connection
+    entities_mods = tf.contrib.layers.fully_connected(inputs=attention_qkv, num_outputs=34)
+    # entities_mods = snt.BatchApply(snt.nets.MLP([384, 384, 34]))(attention_qkv)
     conv_out += entities_mods
-    # output_size = h * k * v
-    print("CONV OUT: ", conv_out)
+    
     conv_out = tf.reshape(conv_out, [batch_size, self.n_entities, self.n_entities, 34])
     conv_out = tf.keras.layers.MaxPool2D(pool_size=(self.n_entities, self.n_entities), padding='valid')(conv_out)
     conv_out = tf.squeeze(conv_out, axis=[1, 2])
@@ -205,8 +208,6 @@ class ImpalaFeedForward(snt.AbstractModule):
     conv_out = snt.BatchFlatten()(conv_out)
     conv_out = snt.Linear(256)(conv_out)
     conv_out = tf.nn.relu(conv_out)
-
-    #### ------ #### 
 
     # Append clipped last reward and one hot last action.
     clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
