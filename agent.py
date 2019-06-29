@@ -17,6 +17,8 @@ import utilities_atari
 import dmlab30_utilities
 # from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
+FLAGS = tf.app.flags.FLAGS
+
 nest = tf.contrib.framework.nest
 AgentOutput = collections.namedtuple('AgentOutput',
                                     'action policy_logits un_normalized_vf normalized_vf')
@@ -77,6 +79,8 @@ class ImpalaSubNetworks(snt.AbstractModule):
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = 3
+    self.use_simplified = FLAGS.use_simplified
+    print("USE SIMPLE: ", self.use_simplified)
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -109,6 +113,26 @@ class ImpalaSubNetworks(snt.AbstractModule):
 
         # Concat the one-hot-encoding and shared non-linear layer
         # tau          = tf.expand_dims(one_hot_task, axis=1)
+        if self.use_simplified == 1:
+          tau          = one_hot_task
+          tau          = tf.reshape(tau, [-1, 1, self._number_of_games])
+
+          conv_out     = tf.reshape(conv_out, [tf.shape(tau)[0], -1, 256])
+          tau          = tf.tile(tau, [1, tf.shape(conv_out)[1], 1])
+          weights      = tf.concat(values=[conv_out, tau], axis=2)
+          weights      = tf.reshape(weights, [-1, self._number_of_games + 256])
+          weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=16)
+          weight_fc    = tf.contrib.layers.fully_connected(inputs=weight_fc, num_outputs=1, activation_fn=None)
+          weights_fc_list.append(weight_fc)
+        
+        values_fc_list.append(value_fc)
+        hidden_fc_list.append(hidden_fc)
+
+    if not self.use_simplified == 1:
+      with tf.variable_scope("attention_net"):
+        conv_out     = snt.Conv2D(32, 4, stride=3)(shared_conv_out)
+        conv_out     = snt.BatchFlatten()(conv_out)
+        conv_out     = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=256)
         tau          = one_hot_task
         tau          = tf.reshape(tau, [-1, 1, self._number_of_games])
 
@@ -116,15 +140,13 @@ class ImpalaSubNetworks(snt.AbstractModule):
         tau          = tf.tile(tau, [1, tf.shape(conv_out)[1], 1])
         weights      = tf.concat(values=[conv_out, tau], axis=2)
         weights      = tf.reshape(weights, [-1, self._number_of_games + 256])
-        weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=16)
-        weight_fc    = tf.contrib.layers.fully_connected(inputs=weight_fc, num_outputs=1, activation_fn=None)
-
-        values_fc_list.append(value_fc)
-        hidden_fc_list.append(hidden_fc)
-        weights_fc_list.append(weight_fc)
-
+        weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=256)
+        weight_fc    = tf.contrib.layers.fully_connected(inputs=weight_fc, num_outputs=self.sub_networks, activation_fn=None)        
+        weights_fc_list = weight_fc
+    else:
+      weights_fc_list  = tf.concat(values=weights_fc_list, axis=1)
+  
     values_fc_list   = tf.concat(values=values_fc_list, axis=1)
-    weights_fc_list  = tf.concat(values=weights_fc_list, axis=1)
     hidden_fc_list   = tf.concat(values=hidden_fc_list, axis=1)
     weights_soft_max = tf.nn.softmax(weights_fc_list)
 
@@ -132,12 +154,6 @@ class ImpalaSubNetworks(snt.AbstractModule):
     hidden_softmaxed = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * hidden_fc_list, axis=1)
 
     return values_softmaxed, hidden_softmaxed
-    # Append clipped last reward and one hot last action.
-    # clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
-    # one_hot_last_action = tf.one_hot(last_action, self._num_actions)
-    # return tf.concat(
-    #     [conv_out, clipped_reward, one_hot_last_action],
-    #     axis=1)
 
   def _head(self, core_output):
     (values, hidden), level_name = core_output
@@ -145,14 +161,11 @@ class ImpalaSubNetworks(snt.AbstractModule):
     level_name    = tf.reshape(level_name, [-1, 1, 1])
     policy_logits = tf.reshape(policy_logits, [tf.shape(level_name)[0], -1, self._number_of_games, self._num_actions])
     level_name    = tf.tile(level_name, [1, tf.shape(policy_logits)[1], 1])
-    print("LEVEL NAME: ", level_name)
-    print("POLICY LOGITS 1: ", policy_logits)
+
     policy_logits = tf.batch_gather(policy_logits, level_name)
     policy_logits = tf.reshape(policy_logits, [tf.shape(values)[0], self._num_actions])
-    # print("POLICY LOGITS: ", policy_logits)
-    # print("VALUES: ", values)
 
-    # policy_logits   = snt.Linear(self._num_actions, name='policy_logits')(hidden) 
+
     baseline = values
     # Sample an action from the policy.
     new_action = tf.multinomial(policy_logits, num_samples=1,
