@@ -469,9 +469,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
-        total_level_returns = {level_name: 0.0 for level_name in level_names}
-        summary_writer = tf.summary.FileWriterCache.get(FLAGS.logdir)
-
+        summary_writer = tf.summary.FileWriterCache.get(logdir)
         # Prepare data for first run.
         session.run_step_fn(
             lambda step_context: step_context.session.run(stage_op))
@@ -501,7 +499,6 @@ def train(action_set, level_names):
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
             
-#            print('mean: {} \n std: {}'.format(mean[game_id[level_name]], std))
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
                               simple_value=episode_return)
@@ -515,14 +512,16 @@ def train(action_set, level_names):
 
             level_returns[level_name].append(episode_return)
 
-            # tf.logging.info('total return %f last %d frames', 
-            #                 total_episode_return, average_frames)
           current_episode_return_list = min(map(len, level_returns.values())) 
           if current_episode_return_list >= 1:
-            level_returns = {level_name: sum(level_returns[level_name]) for level_name in level_names}
-            for level_name in level_names:
-              total_level_returns[level_name] += level_returns[level_name]
-                      
+            def sum_none(list_):
+              if list_:
+                return sum(list_)
+              else:
+                return None
+
+            level_returns = {level_name: sum_none(level_returns[level_name]) for level_name in level_names}
+
             no_cap = utilities_atari.compute_human_normalized_score(level_returns,
                                                             per_level_cap=None)
             cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
@@ -533,15 +532,11 @@ def train(action_set, level_names):
                 tag=(level_name + '/training_no_cap'), simple_value=no_cap)
             summary.value.add(
                 tag=(level_name + '/training_cap_100'), simple_value=cap_100)
-            summary.value.add(
-                tag=(level_name + '/total_level_return'), simple_value=total_level_returns[level_name])
                       
             level_returns = {level_name: [] for level_name in level_names}
-            total_level_returns = {level_name: 0.0 for level_name in level_names}
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
-          print("ENQUEUE OPS: ", enqueue_ops)
           session.run(enqueue_ops)
 
 def test(action_set, level_names):
