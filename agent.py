@@ -17,7 +17,6 @@ import utilities_atari
 import dmlab30_utilities
 # from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
-FLAGS = None
 nest = tf.contrib.framework.nest
 AgentOutput = collections.namedtuple('AgentOutput',
                                     'action policy_logits un_normalized_vf normalized_vf')
@@ -78,9 +77,6 @@ class ImpalaSubNetworks(snt.AbstractModule):
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = 3
-    self.batch_size = FLAGS.batch_size
-    self.time_step = FLAGS.unroll_length
-
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -112,13 +108,12 @@ class ImpalaSubNetworks(snt.AbstractModule):
         hidden_fc    = tf.expand_dims(hidden_fc, axis=1)
 
         # Concat the one-hot-encoding and shared non-linear layer
-        # tau          = tf.broadcast_to(one_hot_task, tf.shape(conv_out))
-        tau          = tf.expand_dims(one_hot_task, axis=1)
-        if self.time_step == 1:
-          tau          = tf.broadcast_to(tau, [self.batch_size, self.time_step, self._number_of_games])
-        else:
-          tau          = tf.broadcast_to(tau, [self.batch_size, self.time_step + 1, self._number_of_games])
-        conv_out     = tf.reshape(conv_out, [self.batch_size, -1, 256])
+        # tau          = tf.expand_dims(one_hot_task, axis=1)
+        tau          = one_hot_task
+        tau          = tf.reshape(tau, [-1, 1, self._number_of_games])
+
+        conv_out     = tf.reshape(conv_out, [tf.shape(tau)[0], -1, 256])
+        tau          = tf.tile(tau, [1, tf.shape(conv_out)[1], 1])
         weights      = tf.concat(values=[conv_out, tau], axis=2)
         weights      = tf.reshape(weights, [-1, self._number_of_games + 256])
         weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=16)
@@ -145,12 +140,19 @@ class ImpalaSubNetworks(snt.AbstractModule):
     #     axis=1)
 
   def _head(self, core_output):
-    values, hidden = core_output
+    (values, hidden), level_name = core_output
+    policy_logits = snt.Linear(self._number_of_games * self._num_actions, name='policy_logits')(hidden) 
+    level_name    = tf.reshape(level_name, [-1, 1, 1])
+    policy_logits = tf.reshape(policy_logits, [tf.shape(level_name)[0], -1, self._number_of_games, self._num_actions])
+    level_name    = tf.tile(level_name, [1, tf.shape(policy_logits)[1], 1])
+    print("LEVEL NAME: ", level_name)
+    print("POLICY LOGITS 1: ", policy_logits)
+    policy_logits = tf.batch_gather(policy_logits, level_name)
+    policy_logits = tf.reshape(policy_logits, [tf.shape(values)[0], self._num_actions])
+    # print("POLICY LOGITS: ", policy_logits)
+    # print("VALUES: ", values)
 
-    print("VALUES: ", values)
-    print("HIDDEN: ", hidden)
-    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(hidden)
-    # baseline = tf.squeeze(snt.Linear(1, name='baseline')(values), axis=-1)
+    # policy_logits   = snt.Linear(self._num_actions, name='policy_logits')(hidden) 
     baseline = values
     # Sample an action from the policy.
     new_action = tf.multinomial(policy_logits, num_samples=1,
@@ -169,9 +171,13 @@ class ImpalaSubNetworks(snt.AbstractModule):
   @snt.reuse_variables
   def unroll(self, actions, env_outputs, level_name):
     _, _, done, _ = env_outputs
+    print("ENV OUTPUTS: ", env_outputs)
+    print("ACTIONS: ", actions)
+    
     torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs, level_name))
-
-    return snt.BatchApply(self._head)(torso_outputs)
+    # print("TORSO OUTPUTS: ", torso_outputs)
+    # print("LEVEL NAME: ", level_name)
+    return snt.BatchApply(self._head)((torso_outputs, level_name))
 
 
 class ImpalaFFRelational(snt.AbstractModule):

@@ -31,7 +31,6 @@ nest = tf.contrib.framework.nest
 
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
-agent.FLAGS = FLAGS
 
 flags.DEFINE_string('logdir', '/tmp/agent', 'TensorFlow log directory.')
 flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
@@ -212,7 +211,6 @@ def build_learner(agent, env_outputs, agent_outputs, level_id):
   """
 
   learner_outputs = agent.unroll(agent_outputs.action, env_outputs, level_id)
-  print("learn_out: ", learner_outputs)
 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.baseline[-1]
@@ -359,14 +357,11 @@ def train(action_set, level_names):
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     agent = Agent(len(action_set))
-    agent.batch_size = 1
-    agent.time_step = 1
     structure = build_actor(agent, env, specific_atari_game, action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
-    agent.batch_size = FLAGS.batch_size
-    agent.time_step = FLAGS.unroll_length
+
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/gpu'), \
        pin_global_variables(global_variable_device):
