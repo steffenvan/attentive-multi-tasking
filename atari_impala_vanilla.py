@@ -18,7 +18,7 @@ import sonnet as snt
 import tensorflow as tf
 import vtrace_orig as vtrace
 from agent import agent_factory
-
+import agent
 try:
   import dynamic_batching
 
@@ -31,6 +31,7 @@ nest = tf.contrib.framework.nest
 
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
+agent.FLAGS = FLAGS
 
 flags.DEFINE_string('logdir', '/tmp/agent', 'TensorFlow log directory.')
 flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
@@ -119,7 +120,9 @@ def build_actor(agent, env, level_name, action_set):
   # initial_agent_state = agent.initial_state(1)
 
   initial_action = tf.zeros([1], dtype=tf.int32)
-  dummy_agent_output = agent((initial_action, nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output)))
+  dummy_agent_output = agent((initial_action, 
+                              nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output),
+                              tf.constant(game_id[level_name], shape=[1])))
   initial_agent_output = nest.map_structure(
       lambda t: tf.zeros(t.shape, t.dtype), dummy_agent_output)
 
@@ -142,7 +145,7 @@ def build_actor(agent, env, level_name, action_set):
     action = agent_output[0]
     batched_env_output = nest.map_structure(lambda t: tf.expand_dims(t, 0),
                                             env_output)
-    agent_output = agent((action, batched_env_output))
+    agent_output = agent((action, batched_env_output, tf.constant(game_id[level_name], shape=[1])))
 
     # Convert action index to the native action.
     action = agent_output[0][0]
@@ -191,7 +194,7 @@ def build_actor(agent, env, level_name, action_set):
     # No backpropagation should be done here.
     return nest.map_structure(tf.stop_gradient, output)
 
-def build_learner(agent, env_outputs, agent_outputs, global_step):
+def build_learner(agent, env_outputs, agent_outputs, level_id):
   """Builds the learner loop.
 
   Args:
@@ -208,7 +211,8 @@ def build_learner(agent, env_outputs, agent_outputs, global_step):
     the environment frames tensor causes an update.
   """
 
-  learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
+  learner_outputs = agent.unroll(agent_outputs.action, env_outputs, level_id)
+  print("learn_out: ", learner_outputs)
 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.baseline[-1]
@@ -272,7 +276,7 @@ def build_learner(agent, env_outputs, agent_outputs, global_step):
     variables = tf.trainable_variables()
     gradients = tf.gradients(total_loss, variables)
     gradients, _ = tf.clip_by_global_norm(gradients, FLAGS.gradient_clipping)
-    train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
+    train_op = optimizer.apply_gradients(zip(gradients, variables))
   else:
     train_op = optimizer.minimize(total_loss)
 
@@ -355,12 +359,14 @@ def train(action_set, level_names):
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
     agent = Agent(len(action_set))
-
+    agent.batch_size = 1
+    agent.time_step = 1
     structure = build_actor(agent, env, specific_atari_game, action_set)
     flattened_structure = nest.flatten(structure)
     dtypes = [t.dtype for t in flattened_structure]    
     shapes = [t.shape.as_list() for t in flattened_structure]
-
+    agent.batch_size = FLAGS.batch_size
+    agent.time_step = FLAGS.unroll_length
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/gpu'), \
        pin_global_variables(global_variable_device):
@@ -406,7 +412,7 @@ def train(action_set, level_names):
     # Build learner.
     if is_learner:
       # Create global step, which is the number of environment frames processed.
-      global_step = tf.get_variable(
+      tf.get_variable(
           'num_environment_frames',
           initializer=tf.zeros_initializer(),
           shape=[],
@@ -440,10 +446,13 @@ def train(action_set, level_names):
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
         # Unroll agent on sequence, create losses and update ops.
+        level_names_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32)
+        level_names_index = tf.reshape(level_names_index, [FLAGS.batch_size])
+
         output = build_learner(agent,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs,
-                               global_step=global_step)
+                               level_id=level_names_index)
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
@@ -451,7 +460,6 @@ def train(action_set, level_names):
     config.gpu_options.allow_growth = True
     # config.gpu_options.per_process_gpu_memory_fraction = 0.8
     logdir = FLAGS.logdir
-    
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
@@ -461,7 +469,7 @@ def train(action_set, level_names):
         log_step_count_steps=50000,
         config=config,
         hooks=[py_process.PyProcessHook()]) as session:
-
+ 
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
@@ -471,12 +479,12 @@ def train(action_set, level_names):
         # Prepare data for first run.
         session.run_step_fn(
             lambda step_context: step_context.session.run(stage_op))
-
         # Execute learning and track performance.
         num_env_frames_v = 0
         total_episode_frames = 0
         
         # Log the total return every *average_frames*.  
+
         total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
@@ -523,6 +531,7 @@ def train(action_set, level_names):
                                                             per_level_cap=None)
             cap_100 = utilities_atari.compute_human_normalized_score(level_returns,
                                                              per_level_cap=100)
+
             summary = tf.summary.Summary()
             summary.value.add(
                 tag=(level_name + '/training_no_cap'), simple_value=no_cap)
@@ -536,6 +545,7 @@ def train(action_set, level_names):
       else:
         # Execute actors (they just need to enqueue their output).
         while True:
+          print("ENQUEUE OPS: ", enqueue_ops)
           session.run(enqueue_ops)
 
 def test(action_set, level_names):

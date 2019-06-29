@@ -14,16 +14,15 @@ import sys
 import vtrace
 import numpy as np
 import utilities_atari
-
 import dmlab30_utilities
 # from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
+FLAGS = None
 nest = tf.contrib.framework.nest
 AgentOutput = collections.namedtuple('AgentOutput',
                                     'action policy_logits un_normalized_vf normalized_vf')
 ImpalaAgentOutput = collections.namedtuple('AgentOutput',
                                              'action policy_logits baseline')
-
 def shallow_convolution(frame):
     conv_out = frame
     conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
@@ -71,45 +70,88 @@ def pnn_convolution(frame):
     conv_out = snt.Conv2D(12, 3, stride=1)(conv_out)
     return conv_out
 
-
 class ImpalaSubNetworks(snt.AbstractModule):
   """Subnetworks"""
 
   def __init__(self, num_actions):
     super(ImpalaSubNetworks, self).__init__(name='impala_subnetworks')
-
     self._num_actions = num_actions
+    self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
+    self.sub_networks = 3
+    self.batch_size = FLAGS.batch_size
+    self.time_step = FLAGS.unroll_length
+
 
   def _torso(self, input_):
-    last_action, env_output = input_
+    last_action, env_output, level_name = input_
     reward, _, _, frame = env_output
 
     frame = tf.to_float(frame)
     frame /= 255
 
-    with tf.variable_scope('convnet'):
-      conv_out = frame
-      conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+    with tf.variable_scope('shared_convnet'):
+      shared_conv_out = frame
+      shared_conv_out = snt.Conv2D(32, 3, stride=2)(shared_conv_out)
+      shared_conv_out = tf.nn.relu(shared_conv_out)
 
+    one_hot_task = tf.one_hot(level_name, self._number_of_games)
 
-    conv_out = tf.nn.relu(conv_out)
-    conv_out = snt.BatchFlatten()(conv_out)
-    conv_out = snt.Linear(256)(conv_out)
-    conv_out = tf.nn.relu(conv_out)
+    values_fc_list = []
+    hidden_fc_list = []
+    weights_fc_list = []
+    
+    for i in range(self.sub_networks):
+      with tf.variable_scope("sub_network_" + str(i)):
+        conv_out     = snt.Conv2D(32, 4, stride=3)(shared_conv_out)
+        conv_out     = snt.BatchFlatten()(conv_out)
+        conv_out     = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=256)
 
+        value_fc     = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=1, activation_fn=None)
+        
+        hidden_fc    = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=self._num_actions, activation_fn=None)
+        hidden_fc    = tf.expand_dims(hidden_fc, axis=1)
+
+        # Concat the one-hot-encoding and shared non-linear layer
+        # tau          = tf.broadcast_to(one_hot_task, tf.shape(conv_out))
+        tau          = tf.expand_dims(one_hot_task, axis=1)
+        if self.time_step == 1:
+          tau          = tf.broadcast_to(tau, [self.batch_size, self.time_step, self._number_of_games])
+        else:
+          tau          = tf.broadcast_to(tau, [self.batch_size, self.time_step + 1, self._number_of_games])
+        conv_out     = tf.reshape(conv_out, [self.batch_size, -1, 256])
+        weights      = tf.concat(values=[conv_out, tau], axis=2)
+        weights      = tf.reshape(weights, [-1, self._number_of_games + 256])
+        weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=16)
+        weight_fc    = tf.contrib.layers.fully_connected(inputs=weight_fc, num_outputs=1, activation_fn=None)
+
+        values_fc_list.append(value_fc)
+        hidden_fc_list.append(hidden_fc)
+        weights_fc_list.append(weight_fc)
+
+    values_fc_list   = tf.concat(values=values_fc_list, axis=1)
+    weights_fc_list  = tf.concat(values=weights_fc_list, axis=1)
+    hidden_fc_list   = tf.concat(values=hidden_fc_list, axis=1)
+    weights_soft_max = tf.nn.softmax(weights_fc_list)
+
+    values_softmaxed = tf.reduce_sum(weights_soft_max * values_fc_list, axis=1)
+    hidden_softmaxed = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * hidden_fc_list, axis=1)
+
+    return values_softmaxed, hidden_softmaxed
     # Append clipped last reward and one hot last action.
-    clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
-    one_hot_last_action = tf.one_hot(last_action, self._num_actions)
-    return tf.concat(
-        [conv_out, clipped_reward, one_hot_last_action],
-        axis=1)
+    # clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
+    # one_hot_last_action = tf.one_hot(last_action, self._num_actions)
+    # return tf.concat(
+    #     [conv_out, clipped_reward, one_hot_last_action],
+    #     axis=1)
 
   def _head(self, core_output):
-    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output)
-    baseline = tf.squeeze(snt.Linear(1, name='baseline')(core_output), axis=-1)
+    values, hidden = core_output
 
+    print("VALUES: ", values)
+    print("HIDDEN: ", hidden)
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(hidden)
+    # baseline = tf.squeeze(snt.Linear(1, name='baseline')(values), axis=-1)
+    baseline = values
     # Sample an action from the policy.
     new_action = tf.multinomial(policy_logits, num_samples=1,
                                 output_dtype=tf.int32)
@@ -118,17 +160,16 @@ class ImpalaSubNetworks(snt.AbstractModule):
     return ImpalaAgentOutput(new_action, policy_logits, baseline)
 
   def _build(self, input_):
-    action, env_output = input_
+    action, env_output, level_name = input_
     actions, env_outputs = nest.map_structure(lambda t: tf.expand_dims(t, 0),
                                               (action, env_output))
-    outputs = self.unroll(actions, env_outputs)
+    outputs = self.unroll(actions, env_outputs, level_name)
     return nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
 
   @snt.reuse_variables
-  def unroll(self, actions, env_outputs):
+  def unroll(self, actions, env_outputs, level_name):
     _, _, done, _ = env_outputs
-
-    torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs))
+    torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs, level_name))
 
     return snt.BatchApply(self._head)(torso_outputs)
 
@@ -138,7 +179,7 @@ class ImpalaFFRelational(snt.AbstractModule):
 
   def __init__(self, num_actions):
     super(ImpalaFFRelational, self).__init__(name='impala_feed_forward_agent_relational')
-
+    
     self._num_actions = num_actions
 
     coord_list = []
@@ -266,7 +307,7 @@ class ImpalaFeedForward(snt.AbstractModule):
       conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
 
     conv_out = tf.nn.relu(conv_out)
-    conv_out = snt.BatchApply(tf.keras.layers.MaxPool2D(pool_size=(9, 9), padding='valid'))(conv_out)
+    # conv_out = snt.BatchApply(tf.keras.layers.MaxPool2D(pool_size=(9, 9), padding='valid'))(conv_out)
     conv_out = snt.BatchFlatten()(conv_out)
     conv_out = snt.Linear(256)(conv_out)
     conv_out = tf.nn.relu(conv_out)
@@ -304,13 +345,15 @@ class ImpalaFeedForward(snt.AbstractModule):
 
     return snt.BatchApply(self._head)(torso_outputs)
 
+
 def agent_factory(agent_name):
   specific_agent = {
     'ImpalaFeedForward'.lower(): ImpalaFeedForward,
-    'PopArtFeedForward'.lower(): PopArtFeedForward,
+    # 'PopArtFeedForward'.lower(): PopArtFeedForward,
     'ImpalaFFRelational'.lower(): ImpalaFFRelational,
-    'ImpalaLSTM'.lower(): ImpalaLSTM,
-    'PopArtLSTM'.lower(): PopArtLSTM
+    'ImpalaSubNetworks'.lower(): ImpalaSubNetworks
+    # 'ImpalaLSTM'.lower(): ImpalaLSTM,
+    # 'PopArtLSTM'.lower(): PopArtLSTM
   }
 
   return specific_agent[agent_name.lower()]
