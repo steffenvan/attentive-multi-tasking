@@ -2,7 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
 import sonnet as snt
 import tensorflow as tf
 import itertools
@@ -11,11 +10,8 @@ import contextlib
 import functools
 import os
 import sys
-import vtrace
-import numpy as np
 import utilities_atari
 import dmlab30_utilities
-# from utilities_atari import compute_baseline_loss, compute_entropy_loss, compute_policy_gradient_loss
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -53,23 +49,18 @@ def res_net_convolution(frame):
                 conv_out += block_input
     return conv_out
 
-def bigger_shallow_convolution(frame):
-      conv_out = frame
-      conv_out = snt.Conv2D(32, 8, stride=4)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      conv_out = snt.Conv2D(64, 4, stride=2)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      conv_out = snt.Conv2D(64, 3, stride=1)(conv_out)
-      return conv_out
+def create_attention_weights(conv_out, tau, num_games):
+  tau          = tf.reshape(tau, [-1, 1, num_games])
+  conv_out     = tf.reshape(conv_out, [tf.shape(tau)[0], -1, 256])
+  tau          = tf.tile(tau, [1, tf.shape(conv_out)[1], 1])
 
-def pnn_convolution(frame):
-    conv_out = frame
-    conv_out = snt.Conv2D(12, 8, stride=4)(conv_out)
-    conv_out = tf.nn.relu(conv_out)
-    conv_out = snt.Conv2D(12, 4, stride=2)(conv_out)
-    conv_out = tf.nn.relu(conv_out)
-    conv_out = snt.Conv2D(12, 3, stride=1)(conv_out)
-    return conv_out
+  # Concatting 
+  weights      = tf.concat(values=[conv_out, tau], axis=2)
+  weights      = tf.reshape(weights, [-1, num_games + 256])
+  weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=16)
+  weight_fc    = tf.contrib.layers.fully_connected(inputs=weight_fc, num_outputs=1, activation_fn=None)
+  return weight_fc
+
 
 class ImpalaSubNetworks(snt.AbstractModule):
   """Subnetworks"""
@@ -80,7 +71,6 @@ class ImpalaSubNetworks(snt.AbstractModule):
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = 3
     self.use_simplified = FLAGS.use_simplified
-    print("USE SIMPLE: ", self.use_simplified)
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -107,49 +97,32 @@ class ImpalaSubNetworks(snt.AbstractModule):
         conv_out     = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=256)
 
         value_fc     = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=1, activation_fn=None)
-        
         hidden_fc    = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=self._num_actions, activation_fn=None)
         hidden_fc    = tf.expand_dims(hidden_fc, axis=1)
-
-        # Concat the one-hot-encoding and shared non-linear layer
-        # tau          = tf.expand_dims(one_hot_task, axis=1)
+        
+        # No seperate attention module. 
         if self.use_simplified == 1:
-          tau          = one_hot_task
-          tau          = tf.reshape(tau, [-1, 1, self._number_of_games])
-
-          conv_out     = tf.reshape(conv_out, [tf.shape(tau)[0], -1, 256])
-          tau          = tf.tile(tau, [1, tf.shape(conv_out)[1], 1])
-          weights      = tf.concat(values=[conv_out, tau], axis=2)
-          weights      = tf.reshape(weights, [-1, self._number_of_games + 256])
-          weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=16)
-          weight_fc    = tf.contrib.layers.fully_connected(inputs=weight_fc, num_outputs=1, activation_fn=None)
-          weights_fc_list.append(weight_fc)
+          weights_fc = create_attention_weights(conv_out, one_hot_task, self._number_of_games)
+          weights_fc_list.append(weights_fc)
         
         values_fc_list.append(value_fc)
         hidden_fc_list.append(hidden_fc)
 
+    # Using seperate attention module
     if not self.use_simplified == 1:
       with tf.variable_scope("attention_net"):
-        conv_out     = snt.Conv2D(32, 4, stride=3)(shared_conv_out)
-        conv_out     = snt.BatchFlatten()(conv_out)
-        conv_out     = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=256)
-        tau          = one_hot_task
-        tau          = tf.reshape(tau, [-1, 1, self._number_of_games])
-
-        conv_out     = tf.reshape(conv_out, [tf.shape(tau)[0], -1, 256])
-        tau          = tf.tile(tau, [1, tf.shape(conv_out)[1], 1])
-        weights      = tf.concat(values=[conv_out, tau], axis=2)
-        weights      = tf.reshape(weights, [-1, self._number_of_games + 256])
-        weight_fc    = tf.contrib.layers.fully_connected(inputs=weights, num_outputs=256)
-        weight_fc    = tf.contrib.layers.fully_connected(inputs=weight_fc, num_outputs=self.sub_networks, activation_fn=None)        
-        weights_fc_list = weight_fc
+        conv_out        = snt.Conv2D(32, 4, stride=3)(shared_conv_out)
+        conv_out        = snt.BatchFlatten()(conv_out)
+        conv_out        = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=256)
+        weights_fc      = create_attention_weights(conv_out, one_hot_task, self._number_of_games)        
+        weights_fc_list = weights_fc
     else:
       weights_fc_list  = tf.concat(values=weights_fc_list, axis=1)
   
     values_fc_list   = tf.concat(values=values_fc_list, axis=1)
     hidden_fc_list   = tf.concat(values=hidden_fc_list, axis=1)
+    
     weights_soft_max = tf.nn.softmax(weights_fc_list)
-
     values_softmaxed = tf.reduce_sum(weights_soft_max * values_fc_list, axis=1)
     hidden_softmaxed = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * hidden_fc_list, axis=1)
 
@@ -164,7 +137,6 @@ class ImpalaSubNetworks(snt.AbstractModule):
 
     policy_logits = tf.batch_gather(policy_logits, level_name)
     policy_logits = tf.reshape(policy_logits, [tf.shape(values)[0], self._num_actions])
-
 
     baseline = values
     # Sample an action from the policy.
@@ -184,12 +156,7 @@ class ImpalaSubNetworks(snt.AbstractModule):
   @snt.reuse_variables
   def unroll(self, actions, env_outputs, level_name):
     _, _, done, _ = env_outputs
-    print("ENV OUTPUTS: ", env_outputs)
-    print("ACTIONS: ", actions)
-    
     torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs, level_name))
-    # print("TORSO OUTPUTS: ", torso_outputs)
-    # print("LEVEL NAME: ", level_name)
     return snt.BatchApply(self._head)((torso_outputs, level_name))
 
 
