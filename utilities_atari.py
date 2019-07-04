@@ -270,12 +270,10 @@ def _transform_level_returns(level_returns):
   new_level_returns = {}
   for level_name, returns in level_returns.iteritems():
     new_level_returns[ATARI_GAMES.get(level_name, level_name)] = returns
-
-  test_set = set(ATARI_GAMES.values())
+    
   diff = test_set - set(new_level_returns.keys())
   if diff:
     raise ValueError('Missing levels: %s' % list(diff))
-    
   for level_name, returns in new_level_returns.iteritems():
     if level_name in test_set:
       if returns == None:
