@@ -20,6 +20,7 @@ AgentOutput = collections.namedtuple('AgentOutput',
                                     'action policy_logits un_normalized_vf normalized_vf')
 ImpalaAgentOutput = collections.namedtuple('AgentOutput',
                                              'action policy_logits baseline')
+                                             
 def shallow_convolution(frame):
     conv_out = frame
     conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
