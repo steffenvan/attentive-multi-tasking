@@ -60,6 +60,7 @@ flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
 flags.DEFINE_string('level_name', 'PongNoFrameskip-v4', 'level name')
+flags.DEFINE_integer('multi_task', 0, 'Training on multiple games')
 
 # Loss settings.
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
@@ -194,7 +195,7 @@ def build_actor(agent, env, level_name, action_set):
     # No backpropagation should be done here.
     return nest.map_structure(tf.stop_gradient, output)
 
-def build_learner(agent, env_outputs, agent_outputs, level_id):
+def build_learner(agent, env_outputs, agent_outputs, global_step, levels_index):
   """Builds the learner loop.
 
   Args:
@@ -205,13 +206,15 @@ def build_learner(agent, env_outputs, agent_outputs, level_id):
       [T+1, ...].
     agent_outputs: An `AgentOutput` namedtuple where each field is of shape
       [T+1, ...].
+    global_step: The current time step T. 
+    levels_index: The current level names aspython integers for the current batch. 
 
   Returns:
     A tuple of (done, infos, and environment frames) where
     the environment frames tensor causes an update.
   """
 
-  learner_outputs = agent.unroll(agent_outputs.action, env_outputs, level_id)
+  learner_outputs = agent.unroll(agent_outputs.action, env_outputs, levels_index)
 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.baseline[-1]
@@ -275,7 +278,7 @@ def build_learner(agent, env_outputs, agent_outputs, level_id):
     variables = tf.trainable_variables()
     gradients = tf.gradients(total_loss, variables)
     gradients, _ = tf.clip_by_global_norm(gradients, FLAGS.gradient_clipping)
-    train_op = optimizer.apply_gradients(zip(gradients, variables))
+    train_op = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
   else:
     train_op = optimizer.minimize(total_loss)
 
@@ -408,7 +411,7 @@ def train(action_set, level_names):
     # Build learner.
     if is_learner:
       # Create global step, which is the number of environment frames processed.
-      tf.get_variable(
+      global_step = tf.get_variable(
           'num_environment_frames',
           initializer=tf.zeros_initializer(),
           shape=[],
@@ -441,14 +444,15 @@ def train(action_set, level_names):
         # Returns an ActorOutput tuple -> (level name, agent_state, env_outputs, agent_output)
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
-        # Unroll agent on sequence, create losses and update ops.
-        level_names_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32)
-        level_names_index = tf.reshape(level_names_index, [FLAGS.batch_size])
+        levels_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32)
+        levels_index = tf.reshape(levels_index, [FLAGS.batch_size])
 
+        # Unroll agent on sequence, create losses and update ops.
         output = build_learner(agent,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs,
-                               level_id=level_names_index)
+                               global_step=global_step,
+                               levels_index=levels_index)
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
@@ -469,6 +473,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
+        summary_dir = os.path.join(FLAGS.logdir, "logging")
         summary_writer = tf.summary.FileWriterCache.get(logdir)
         # Prepare data for first run.
         session.run_step_fn(
@@ -509,11 +514,11 @@ def train(action_set, level_names):
             summary.value.add(tag=level_name + '/acc_episode_frames',
                                 simple_value=acc_episode_step)
             summary_writer.add_summary(summary, num_env_frames_v)
-
+            
             level_returns[level_name].append(episode_return)
 
           current_episode_return_list = min(map(len, level_returns.values())) 
-          if current_episode_return_list >= 1:
+          if FLAGS.multi_task == 1 and current_episode_return_list >= 1:
             def sum_none(list_):
               if list_:
                 return sum(list_)
@@ -580,11 +585,18 @@ def test(action_set, level_names):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ,15 ,16, 17] 
-    level_names = games
-    if FLAGS.mode == 'train':
-      train(action_set, level_names) 
+    if FLAGS.multi_task == 1 and FLAGS.mode == 'train':
+      level_names = utilities_atari.ATARI_GAMES.keys()
+    elif FLAGS.multi_task == 1 and FLAGS.mode == 'test':
+      level_names = utilities_atari.ATARI_GAMES.values()
     else:
-      test(action_set, [FLAGS.level_name])
+      level_names = [FLAGS.level_name]
+      action_set = atari_environment.get_action_set(FLAGS.level_name)
+
+    if FLAGS.mode == 'train':
+      train(action_set, level_names)
+    else:
+      test(action_set, level_names)
 
 if __name__ == '__main__':
     tf.app.run()    
