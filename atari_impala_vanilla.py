@@ -483,7 +483,20 @@ def train(action_set, level_names):
         total_episode_frames = 0
         
         # Log the total return every *average_frames*.  
-
+        # total_parameters = 0
+        # for variable in tf.trainable_variables():
+        #   # shape is an array of tf.Dimension
+        #   shape = variable.get_shape()
+        #   print(shape)
+        #   print(len(shape))
+        #   variable_parameters = 1
+        #   for dim in shape:
+        #       print(dim)
+        #       variable_parameters *= dim.value
+        #   print("Variable params: ", variable_parameters)
+        #   total_parameters += variable_parameters
+        # print("Total parameters: ", total_parameters)
+        print("total params:", np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
         total_episode_return = 0.0
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
