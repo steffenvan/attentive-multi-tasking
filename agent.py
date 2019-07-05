@@ -54,7 +54,6 @@ def create_attention_weights(conv_out, tau, num_games):
   tau          = tf.reshape(tau, [-1, 1, num_games])
   conv_out     = tf.reshape(conv_out, [tf.shape(tau)[0], -1, 256])
   tau          = tf.tile(tau, [1, tf.shape(conv_out)[1], 1])
-
   # Concatting 
   weights      = tf.concat(values=[conv_out, tau], axis=2)
   weights      = tf.reshape(weights, [-1, num_games + 256])
@@ -70,7 +69,7 @@ class ImpalaSubNetworks(snt.AbstractModule):
     super(ImpalaSubNetworks, self).__init__(name='impala_subnetworks')
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
-    self.sub_networks = 3
+    self.sub_networks = 2
     self.use_simplified = FLAGS.use_simplified
 
   def _torso(self, input_):
@@ -80,10 +79,10 @@ class ImpalaSubNetworks(snt.AbstractModule):
     frame = tf.to_float(frame)
     frame /= 255
 
-    with tf.variable_scope('shared_convnet'):
-      shared_conv_out = frame
-      shared_conv_out = snt.Conv2D(32, 3, stride=2)(shared_conv_out)
-      shared_conv_out = tf.nn.relu(shared_conv_out)
+    # with tf.variable_scope('shared_convnet'):
+    #   shared_conv_out = frame
+      # shared_conv_out = snt.Conv2D(16, 8, stride=4)(shared_conv_out)
+    #   shared_conv_out = tf.nn.relu(shared_conv_out)
 
     one_hot_task = tf.one_hot(level_name, self._number_of_games)
 
@@ -93,7 +92,7 @@ class ImpalaSubNetworks(snt.AbstractModule):
     
     for i in range(self.sub_networks):
       with tf.variable_scope("sub_network_" + str(i)):
-        conv_out     = snt.Conv2D(32, 4, stride=3)(shared_conv_out)
+        conv_out     = snt.Conv2D(32, 4, stride=3)(frame)
         conv_out     = snt.BatchFlatten()(conv_out)
         conv_out     = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=256)
 
@@ -112,7 +111,7 @@ class ImpalaSubNetworks(snt.AbstractModule):
     # Using seperate attention module
     if not self.use_simplified == 1:
       with tf.variable_scope("attention_net"):
-        conv_out        = snt.Conv2D(32, 4, stride=3)(shared_conv_out)
+        conv_out        = snt.Conv2D(32, 4, stride=3)(frame)
         conv_out        = snt.BatchFlatten()(conv_out)
         conv_out        = tf.contrib.layers.fully_connected(inputs=conv_out, num_outputs=256)
         weights_fc      = create_attention_weights(conv_out, one_hot_task, self._number_of_games)        
@@ -294,7 +293,6 @@ class ImpalaFeedForward(snt.AbstractModule):
       conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
 
     conv_out = tf.nn.relu(conv_out)
-    # conv_out = snt.BatchApply(tf.keras.layers.MaxPool2D(pool_size=(9, 9), padding='valid'))(conv_out)
     conv_out = snt.BatchFlatten()(conv_out)
     conv_out = snt.Linear(256)(conv_out)
     conv_out = tf.nn.relu(conv_out)
