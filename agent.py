@@ -79,11 +79,6 @@ class ImpalaSubNetworks(snt.AbstractModule):
     frame = tf.to_float(frame)
     frame /= 255
 
-    # with tf.variable_scope('shared_convnet'):
-    #   shared_conv_out = frame
-      # shared_conv_out = snt.Conv2D(16, 8, stride=4)(shared_conv_out)
-    #   shared_conv_out = tf.nn.relu(shared_conv_out)
-
     one_hot_task = tf.one_hot(level_name, self._number_of_games)
 
     values_fc_list = []
@@ -271,6 +266,89 @@ class ImpalaFFRelational(snt.AbstractModule):
     return snt.BatchApply(self._head)(torso_outputs)
 
 
+class SelfAttentionSubnet(snt.AbstractModule):
+  """Agent with Simple CNN."""
+
+  def __init__(self, num_actions):
+    super(SelfAttentionSubnet, self).__init__(name='self_attention_subnet')
+
+    self._num_actions = num_actions
+    self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
+    self.sub_networks = 1
+    self.use_simplified = FLAGS.use_simplified
+
+  def _torso(self, input_):
+    last_action, env_output, level_name = input_
+    reward, _, _, frame = env_output
+
+    frame = tf.to_float(frame)
+    frame /= 255
+
+    fc_out_list = []
+    weight_list = []
+
+    one_hot_task = tf.one_hot(level_name, self._number_of_games)
+    tau          = tf.reshape(one_hot_task, [-1, 1, self._number_of_games])
+    frame_2      = tf.reshape(frame, [tf.shape(tau)[0], -1, 84 * 84 * 4])
+    tau          = tf.tile(tau, [1, tf.shape(frame_2)[1], 1])
+    tau          = tf.reshape(tau, [-1, self._number_of_games])
+
+    for i in range(self.sub_networks):
+      conv_out = frame
+      conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+      conv_out = tf.nn.relu(conv_out)
+      with tf.variable_scope('subnetwork_' + str(i)):
+        
+        fc_out   = snt.BatchFlatten()(conv_out)
+        fc_out   = snt.Linear(256)(fc_out)
+        fc_out   = tf.expand_dims(fc_out, axis=1)
+        conv_out = tf.keras.layers.GlobalMaxPooling2D()(conv_out)
+        conv_out = tf.concat(values=[conv_out, tau], axis=1)
+        weight   = snt.Linear(1, name='weights')(conv_out)
+        fc_out_list.append(fc_out)
+        weight_list.append(weight)
+
+    
+    fc_out_list = tf.concat(values=fc_out_list, axis=1)
+    weight_list = tf.concat(values=weight_list, axis=1)
+
+    weights_soft_max = tf.nn.softmax(weight_list)
+    hidden_softmaxed = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1)
+    # Append clipped last reward and one hot last action.
+    clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
+    one_hot_last_action = tf.one_hot(last_action, self._num_actions)
+    return tf.concat(
+        [hidden_softmaxed, clipped_reward, one_hot_last_action],
+        axis=1)
+
+  def _head(self, core_output):
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output)
+    baseline = tf.squeeze(snt.Linear(1, name='baseline')(core_output), axis=-1)
+
+    # Sample an action from the policy.
+    new_action = tf.multinomial(policy_logits, num_samples=1,
+                                output_dtype=tf.int32)
+    new_action = tf.squeeze(new_action, 1, name='new_action')
+
+    return ImpalaAgentOutput(new_action, policy_logits, baseline)
+
+  def _build(self, input_):
+    action, env_output, level_name = input_
+    actions, env_outputs = nest.map_structure(lambda t: tf.expand_dims(t, 0),
+                                              (action, env_output))
+    outputs = self.unroll(actions, env_outputs, level_name)
+    return nest.map_structure(lambda t: tf.squeeze(t, 0), outputs)
+
+  @snt.reuse_variables
+  def unroll(self, actions, env_outputs, level_name):
+    _, _, done, _ = env_outputs
+
+    torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs, level_name))
+
+    return snt.BatchApply(self._head)(torso_outputs)
+
 class ImpalaFeedForward(snt.AbstractModule):
   """Agent with Simple CNN."""
 
@@ -336,7 +414,8 @@ def agent_factory(agent_name):
     'ImpalaFeedForward'.lower(): ImpalaFeedForward,
     # 'PopArtFeedForward'.lower(): PopArtFeedForward,
     'ImpalaFFRelational'.lower(): ImpalaFFRelational,
-    'ImpalaSubNetworks'.lower(): ImpalaSubNetworks
+    'ImpalaSubNetworks'.lower(): ImpalaSubNetworks,
+    'SelfAttentionSubnet'.lower(): SelfAttentionSubnet
     # 'ImpalaLSTM'.lower(): ImpalaLSTM,
     # 'PopArtLSTM'.lower(): PopArtLSTM
   }
