@@ -46,6 +46,8 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
 # Agent
 flags.DEFINE_string('agent_name', 'ImpalaFeedForward', 'Which learner to use')
 flags.DEFINE_integer('use_simplified', 0, 'Which subnetwork agent to use.')
+flags.DEFINE_integer('subnets', 1, 'How many subnetworks to use.')
+
 
 # Atari environments
 flags.DEFINE_integer('width', 84, 'Width of observation')

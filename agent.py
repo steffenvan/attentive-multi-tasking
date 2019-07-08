@@ -274,7 +274,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
-    self.sub_networks = 1
+    self.sub_networks = FLAGS.subnets
     self.use_simplified = FLAGS.use_simplified
 
   def _torso(self, input_):
@@ -300,17 +300,17 @@ class SelfAttentionSubnet(snt.AbstractModule):
       conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
       conv_out = tf.nn.relu(conv_out)
       with tf.variable_scope('subnetwork_' + str(i)):
-        
         fc_out   = snt.BatchFlatten()(conv_out)
         fc_out   = snt.Linear(256)(fc_out)
         fc_out   = tf.expand_dims(fc_out, axis=1)
+
         conv_out = tf.keras.layers.GlobalMaxPooling2D()(conv_out)
         conv_out = tf.concat(values=[conv_out, tau], axis=1)
         weight   = snt.Linear(1, name='weights')(conv_out)
+        
         fc_out_list.append(fc_out)
         weight_list.append(weight)
 
-    
     fc_out_list = tf.concat(values=fc_out_list, axis=1)
     weight_list = tf.concat(values=weight_list, axis=1)
 
