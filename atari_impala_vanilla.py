@@ -474,7 +474,7 @@ def train(action_set, level_names):
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
         summary_dir = os.path.join(FLAGS.logdir, "logging")
-        summary_writer = tf.summary.FileWriterCache.get(logdir)
+        summary_writer = tf.summary.FileWriterCache.get(summary_dir)
         # Prepare data for first run.
         session.run_step_fn(
             lambda step_context: step_context.session.run(stage_op))
