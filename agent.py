@@ -267,7 +267,7 @@ class ImpalaFFRelational(snt.AbstractModule):
 
 
 class SelfAttentionSubnet(snt.AbstractModule):
-  """Agent with Simple CNN."""
+  """Agent with subnetworks and self-attention."""
 
   def __init__(self, num_actions):
     super(SelfAttentionSubnet, self).__init__(name='self_attention_subnet')
@@ -294,12 +294,10 @@ class SelfAttentionSubnet(snt.AbstractModule):
     tau          = tf.tile(tau, [1, tf.shape(frame_2)[1], 1])
     tau          = tf.reshape(tau, [-1, self._number_of_games])
 
+    # TODO: Will have to experiment with these variables. 
     h = 4
     d_k = 6
     d_v = 4
-    q_dim = h * d_k
-    k_dim = h * d_k
-    v_dim = h * d_v
 
     for i in range(self.sub_networks):
       with tf.variable_scope('subnetwork_' + str(i)):
@@ -310,8 +308,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
         conv_out = self_attention.augmented_conv2d(conv_out, 32, 2, d_k * h, d_v * h, h, True, batch_size)
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
-        # print("CONV OUT 0: ", conv_out)
-        # print("CONV OUT 1: ", conv_out)
+
         conv_out = snt.BatchFlatten()(conv_out)
         fc_out   = conv_out
         fc_out   = snt.Linear(256)(fc_out)
@@ -328,6 +325,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
     weights_soft_max = tf.nn.softmax(weight_list)
     hidden_softmaxed = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1)
+
     # Append clipped last reward and one hot last action.
     clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
     one_hot_last_action = tf.one_hot(last_action, self._num_actions)
@@ -336,8 +334,21 @@ class SelfAttentionSubnet(snt.AbstractModule):
         axis=1)
 
   def _head(self, core_output):
-    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output)
-    baseline = tf.squeeze(snt.Linear(1, name='baseline')(core_output), axis=-1)
+    core_output, level_name = core_output
+    baseline_games = snt.Linear(self._number_of_games)(core_output)
+  
+    # adding time dimension
+    level_name = tf.reshape(level_name, [-1, 1, 1])
+    baseline_games = tf.reshape(baseline_games, [tf.shape(level_name)[0], -1, self._number_of_games])
+
+    level_name = tf.tile(level_name, [1, tf.shape(baseline_games)[1], 1])
+    baseline = tf.batch_gather(baseline_games, level_name)
+    baseline = tf.reshape(baseline, [tf.shape(core_output)[0]])
+
+    policy_logits = snt.Linear(self._number_of_games * self._num_actions, name='policy_logits')(core_output) 
+    policy_logits = tf.reshape(policy_logits, [tf.shape(level_name)[0], -1, self._number_of_games, self._num_actions])
+    policy_logits = tf.batch_gather(policy_logits, level_name)
+    policy_logits = tf.reshape(policy_logits, [tf.shape(core_output)[0], self._num_actions])
 
     # Sample an action from the policy.
     new_action = tf.multinomial(policy_logits, num_samples=1,
@@ -359,7 +370,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
     torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs, level_name))
 
-    return snt.BatchApply(self._head)(torso_outputs)
+    return snt.BatchApply(self._head)((torso_outputs, level_name))
 
 class ImpalaFeedForward(snt.AbstractModule):
   """Agent with Simple CNN."""
