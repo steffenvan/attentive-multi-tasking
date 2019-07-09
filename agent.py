@@ -12,7 +12,7 @@ import os
 import sys
 import utilities_atari
 import dmlab30_utilities
-
+import self_attention
 FLAGS = tf.app.flags.FLAGS
 
 nest = tf.contrib.framework.nest
@@ -283,6 +283,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
     frame = tf.to_float(frame)
     frame /= 255
+    batch_size = tf.shape(frame)[0]
 
     fc_out_list = []
     weight_list = []
@@ -293,18 +294,29 @@ class SelfAttentionSubnet(snt.AbstractModule):
     tau          = tf.tile(tau, [1, tf.shape(frame_2)[1], 1])
     tau          = tf.reshape(tau, [-1, self._number_of_games])
 
+    h = 4
+    d_k = 6
+    d_v = 4
+    q_dim = h * d_k
+    k_dim = h * d_k
+    v_dim = h * d_v
+
     for i in range(self.sub_networks):
-      conv_out = frame
-      conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
       with tf.variable_scope('subnetwork_' + str(i)):
-        fc_out   = snt.BatchFlatten()(conv_out)
+        conv_out = frame
+        conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
+        conv_out = tf.nn.relu(conv_out)
+        # conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+        conv_out = self_attention.augmented_conv2d(conv_out, 32, 2, d_k * h, d_v * h, h, True, batch_size)
+        conv_out = tf.nn.relu(conv_out)
+        conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
+        # print("CONV OUT 0: ", conv_out)
+        # print("CONV OUT 1: ", conv_out)
+        conv_out = snt.BatchFlatten()(conv_out)
+        fc_out   = conv_out
         fc_out   = snt.Linear(256)(fc_out)
         fc_out   = tf.expand_dims(fc_out, axis=1)
 
-        conv_out = tf.keras.layers.GlobalMaxPooling2D()(conv_out)
         conv_out = tf.concat(values=[conv_out, tau], axis=1)
         weight   = snt.Linear(1, name='weights')(conv_out)
         
