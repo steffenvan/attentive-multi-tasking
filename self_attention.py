@@ -3,23 +3,15 @@ import tensorflow as tf
 
 def split_heads_2d(inputs, N_h):
     s = inputs.shape[:-1]
-    print("S IS: ", s)
-    print("Nh is: ", N_h)
-    # s = tf.reshape(s, [3])
     ret_shape = [-1, s[1], s[2], N_h, inputs.shape[-1] / N_h]
-    # ret_shape = tf.concat(values=[s, tf.TensorShape([N_h, tf.div(inputs.shape[-1], N_h)])], axis=0)
     split = tf.reshape(inputs, ret_shape)
     return tf.transpose(split, [0, 3, 1, 2, 4])
-
 
 def combine_heads_2d(inputs):
     # inputs: [batch, N_h, H, W, d_k]
     transposed = tf.transpose(inputs, [0, 2, 3, 1, 4])
     # [batch_, H, W, N_h, d_k]
-    print("TRANSPOSED: ", transposed)
     N_h, d_k = transposed.shape[-2:]
-    # N_h, d_k
-    # ret_shape = tf.concat(values=[transposed.shape[:-2], tf.reshape(N_h * d_k, [1])], axis=0)
     ret_shape = [-1, transposed.shape[1], transposed.shape[2], N_h * d_k]
     return tf.reshape(transposed, ret_shape)
 
@@ -35,7 +27,7 @@ def compute_flat_qkv(inputs, d_k, d_v, N_h):
     flat_q = tf.reshape(q, [-1, N_h, H * W, d_k/N_h])
     flat_k = tf.reshape(k, [-1, N_h, H * W, d_k/N_h])
     flat_v = tf.reshape(v, [-1, N_h, H * W, d_v/N_h])
-    return flat_q, flat_k, flat_v, N, H, W
+    return flat_q, flat_k, flat_v, H, W
 
 def relative_logits_1d(q, rel_k, H, W, N_h, transpose_mask):
     rel_logits = tf.einsum('bhsd,md->bhsm', q, rel_k)
@@ -49,7 +41,6 @@ def relative_logits_1d(q, rel_k, H, W, N_h, transpose_mask):
     return rel_logits
 
 def relative_logits(q, H, W):
-    print("Q IS: ", q)
     _, N_h, _ , d_k = q.shape
 
     key_rel_w = tf.get_variable(
@@ -81,15 +72,11 @@ def relative_logits(q, H, W):
 
 def rel_to_abs(x):
     B, N_h, L, _ = x.shape
-    # col_pad = tf.zeros((tf.shape(x)[0], N_h, L, 1))
-
-    # col_pad = tf.tile(col_pad, [B, 1, 1, 1])
-    # x = tf.concat([x, col_pad], axis=3)
     x = tf.pad(x, paddings=[[0, 0], [0,0], [0, 0], [0, 1]])
+
     flat_x = tf.reshape(x, [-1, N_h, L * 2 * L])
-    # flat_pad = tf.zeros((B, N_h, L-1))
     flat_x_padded = tf.pad(flat_x, paddings=[[0,0], [0, 0], [0, L-1]])
-    # flat_x_padded = tf.concat([flat_x, flat_pad], axis=2)
+
     final_x = tf.reshape(flat_x_padded, [-1, N_h, L+1, 2*L-1])
     final_x = final_x[:, :, :L, L-1:]
     return final_x
@@ -108,7 +95,7 @@ def augmented_conv2d(X, Fout, k, d_k, d_v, N_h, relative, B):
          B: Batch size
     """
     conv_out = tf.layers.conv2d(X, Fout - d_v, k)
-    flat_q, flat_k, flat_v, N, H, W = compute_flat_qkv(X, d_k, d_v, N_h)
+    flat_q, flat_k, flat_v, H, W = compute_flat_qkv(X, d_k, d_v, N_h)
     logits = tf.matmul(flat_q, flat_k, transpose_b=True)
     if relative:
         h_rel_logits, w_rel_logits = relative_logits(flat_q, H, W) # error here: flat_q
