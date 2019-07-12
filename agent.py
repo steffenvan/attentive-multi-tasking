@@ -54,6 +54,7 @@ class ImpalaSubnet(snt.AbstractModule):
       conv_out = tf.nn.relu(conv_out)
       conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
       conv_out = tf.nn.relu(conv_out)
+      
       with tf.variable_scope('subnetwork_' + str(i)):
         fc_out   = snt.BatchFlatten()(conv_out)
         fc_out   = snt.Linear(256)(fc_out)
@@ -133,7 +134,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     tau          = tf.reshape(tau, [-1, self._number_of_games])
 
     # TODO: Will have to experiment with these variables. 
-    h = 4
+    h   = 4
     d_k = 6
     d_v = 4
 
@@ -143,6 +144,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
         conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
         conv_out = tf.nn.relu(conv_out)
         # conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+        print("CONV OUT: ", conv_out)
         conv_out = self_attention.augmented_conv2d(conv_out, 32, 2, d_k * h, d_v * h, h, True, batch_size)
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
@@ -158,14 +160,14 @@ class SelfAttentionSubnet(snt.AbstractModule):
         fc_out_list.append(fc_out)
         weight_list.append(weight)
 
-    fc_out_list = tf.concat(values=fc_out_list, axis=1)
-    weight_list = tf.concat(values=weight_list, axis=1)
+    fc_out_list         = tf.concat(values=fc_out_list, axis=1)
+    weight_list         = tf.concat(values=weight_list, axis=1)
 
-    weights_soft_max = tf.nn.softmax(weight_list)
-    hidden_softmaxed = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1)
+    weights_soft_max    = tf.nn.softmax(weight_list)
+    hidden_softmaxed    = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1)
 
     # Append clipped last reward and one hot last action.
-    clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
+    clipped_reward      = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
     one_hot_last_action = tf.one_hot(last_action, self._num_actions)
     return tf.concat(
         [hidden_softmaxed, clipped_reward, one_hot_last_action],

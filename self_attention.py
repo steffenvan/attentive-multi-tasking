@@ -3,7 +3,7 @@ import tensorflow as tf
 
 def split_heads_2d(inputs, N_h):
     s = inputs.shape[:-1]
-    ret_shape = [-1, s[1], s[2], N_h, inputs.shape[-1] / N_h]
+    ret_shape = [-1, s[1], s[2], N_h, inputs.shape[-1] // N_h]
     split = tf.reshape(inputs, ret_shape)
     return tf.transpose(split, [0, 3, 1, 2, 4])
 
@@ -16,7 +16,7 @@ def combine_heads_2d(inputs):
     return tf.reshape(transposed, ret_shape)
 
 def compute_flat_qkv(inputs, d_k, d_v, N_h):
-    N, H, W, _ = inputs.shape
+    _, H, W, _ = inputs.shape
     qkv = tf.layers.conv2d(inputs, 2*d_k + d_v, 1)
     q, k, v = tf.split(qkv, [d_k, d_k, d_v], axis=3)
     q = split_heads_2d(q, N_h)
@@ -71,12 +71,10 @@ def relative_logits(q, H, W):
 
 
 def rel_to_abs(x):
-    B, N_h, L, _ = x.shape
+    _, N_h, L, _ = x.shape
     x = tf.pad(x, paddings=[[0, 0], [0,0], [0, 0], [0, 1]])
-
     flat_x = tf.reshape(x, [-1, N_h, L * 2 * L])
     flat_x_padded = tf.pad(flat_x, paddings=[[0,0], [0, 0], [0, L-1]])
-
     final_x = tf.reshape(flat_x_padded, [-1, N_h, L+1, 2*L-1])
     final_x = final_x[:, :, :L, L-1:]
     return final_x
@@ -98,12 +96,12 @@ def augmented_conv2d(X, Fout, k, d_k, d_v, N_h, relative, B):
     flat_q, flat_k, flat_v, H, W = compute_flat_qkv(X, d_k, d_v, N_h)
     logits = tf.matmul(flat_q, flat_k, transpose_b=True)
     if relative:
-        h_rel_logits, w_rel_logits = relative_logits(flat_q, H, W) # error here: flat_q
+        h_rel_logits, w_rel_logits = relative_logits(flat_q, H, W) 
         logits += h_rel_logits
         logits += w_rel_logits
     weights = tf.nn.softmax(logits)
     attn_out = tf.matmul(weights, flat_v)
-    attn_out = tf.reshape(attn_out, [B, N_h, H, W, d_v // N_h]) # error here: flat_v
+    attn_out = tf.reshape(attn_out, [B, N_h, H, W, d_v // N_h])
     attn_out = combine_heads_2d(attn_out)
     attn_out = tf.layers.conv2d(attn_out, d_v, 1)
     conv_out = tf.image.resize_bilinear(conv_out, size=X.shape[1:3])
