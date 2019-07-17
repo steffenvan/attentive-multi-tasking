@@ -80,11 +80,11 @@ def rel_to_abs(x):
     return final_x
 
 
-def augmented_conv2d(X, Fout, k, d_k, d_v, N_h, relative, B):
+def augmented_conv2d(X, output_channels, k, d_k, d_v, N_h, relative, B):
     """
     Args:
          X: input image
-         Fout: Output filters
+         output_channels: 
          k: kernel_size
          d_k: dimension of keys
          d_v: dimension of values
@@ -92,7 +92,7 @@ def augmented_conv2d(X, Fout, k, d_k, d_v, N_h, relative, B):
          relative: Whether to use relative position,
          B: Batch size
     """
-    conv_out = tf.layers.conv2d(X, Fout - d_v, k)
+    conv_out = tf.layers.conv2d(X, output_channels - d_v, k)
     flat_q, flat_k, flat_v, H, W = compute_flat_qkv(X, d_k, d_v, N_h)
     logits = tf.matmul(flat_q, flat_k, transpose_b=True)
     if relative:

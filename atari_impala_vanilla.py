@@ -238,8 +238,6 @@ def build_learner(agent, env_outputs, agent_outputs, global_step, levels_index):
     clipped_rewards = tf.where(rewards < 0, .3 * squeezed, squeezed) * 5.
 
   discounts = tf.to_float(~done) * FLAGS.discounting
-  # game_specific_mean = tf.gather(agent._mean, env_id)
-  # game_specific_std = tf.gather(agent._std, env_id)
 
   # Compute V-trace returns and weights.
   # Note, this is put on the CPU because it's faster than on GPU. It can be
@@ -369,7 +367,7 @@ def train(action_set, level_names):
     shapes = [t.shape.as_list() for t in flattened_structure]
 
   with tf.Graph().as_default(), \
-       tf.device(local_job_device + '/gpu'), \
+       tf.device(local_job_device + '/cpu'), \
        pin_global_variables(global_variable_device):
     tf.set_random_seed(FLAGS.seed)  # Makes initialization deterministic.
 
@@ -482,10 +480,9 @@ def train(action_set, level_names):
             lambda step_context: step_context.session.run(stage_op))
         # Execute learning and track performance.
         num_env_frames_v = 0
-        total_episode_frames = 0
         
         print("total params:", np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
-        total_episode_return = 0.0
+        
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
               (data_from_actors.level_name,) + output + (stage_op,))

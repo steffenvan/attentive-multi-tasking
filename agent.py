@@ -114,7 +114,6 @@ class SelfAttentionSubnet(snt.AbstractModule):
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
-    self.use_simplified = FLAGS.use_simplified
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -135,36 +134,35 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
     # TODO: Will have to experiment with these variables. 
     h   = 4
-    d_k = 6
-    d_v = 4
+    d_k = 24
+    d_v = 24    
 
     for i in range(self.sub_networks):
       with tf.variable_scope('subnetwork_' + str(i)):
         conv_out = frame
         conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
         conv_out = tf.nn.relu(conv_out)
-        # conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
-        print("CONV OUT: ", conv_out)
-        conv_out = self_attention.augmented_conv2d(conv_out, 32, 2, d_k * h, d_v * h, h, True, batch_size)
+
+        # Applying self attention 
+        conv_out = self_attention.augmented_conv2d(conv_out, 32, 2, d_k, d_v, h, True, batch_size)
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
-
         conv_out = snt.BatchFlatten()(conv_out)
-        fc_out   = conv_out
-        fc_out   = snt.Linear(256)(fc_out)
+
+        fc_out   = snt.Linear(256)(conv_out)
         fc_out   = tf.expand_dims(fc_out, axis=1)
 
         conv_out = tf.concat(values=[conv_out, tau], axis=1)
-        weight   = snt.Linear(1, name='weights')(conv_out)
+        weight   = snt.Linear(1, name='attention_weight')(conv_out)
         
         fc_out_list.append(fc_out)
         weight_list.append(weight)
 
-    fc_out_list         = tf.concat(values=fc_out_list, axis=1)
-    weight_list         = tf.concat(values=weight_list, axis=1)
+    fc_out_list         = tf.concat(values=fc_out_list, axis=1) # (84, 1, 256)
+    weight_list         = tf.concat(values=weight_list, axis=1) # (84, 1)
 
-    weights_soft_max    = tf.nn.softmax(weight_list)
-    hidden_softmaxed    = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1)
+    weights_soft_max    = tf.nn.softmax(weight_list) # (84, 1)
+    hidden_softmaxed    = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1) # (84, 256)
 
     # Append clipped last reward and one hot last action.
     clipped_reward      = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
@@ -178,7 +176,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     baseline_games = snt.Linear(self._number_of_games)(core_output)
   
     # adding time dimension
-    level_name = tf.reshape(level_name, [-1, 1, 1])
+    level_name     = tf.reshape(level_name, [-1, 1, 1])
     baseline_games = tf.reshape(baseline_games, [tf.shape(level_name)[0], -1, self._number_of_games])
 
     level_name = tf.tile(level_name, [1, tf.shape(baseline_games)[1], 1])
