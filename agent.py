@@ -136,6 +136,8 @@ class SelfAttentionSubnet(snt.AbstractModule):
     h   = 4
     d_k = 24
     d_v = 24    
+    # 
+    max_d = 16
 
     for i in range(self.sub_networks):
       with tf.variable_scope('subnetwork_' + str(i)):
@@ -147,13 +149,20 @@ class SelfAttentionSubnet(snt.AbstractModule):
         conv_out = self_attention.augmented_conv2d(conv_out, 32, 2, d_k, d_v, h, True, batch_size)
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
-        conv_out = snt.BatchFlatten()(conv_out)
 
-        fc_out   = snt.Linear(256)(conv_out)
-        fc_out   = tf.expand_dims(fc_out, axis=1)
+        # Problem with the FC layer is that it cannot generalize across positions. 
+        # Unique connections are not generalizable.  
+        # Keeps the dimensions constant. 
+        max_d_out = snt.Conv2D(max_d, 3, stride=2)(conv_out)
+        max_d_out = tf.keras.layers.GlobalMaxPool2D()(max_d_out)
+        conv_out  = snt.BatchFlatten()(conv_out)
+        
+        fc_out    = snt.Linear(256 - max_d)(conv_out)
+        fc_out    = tf.concat([fc_out, max_d_out], axis=-1)
+        fc_out    = tf.expand_dims(fc_out, axis=1)
 
-        conv_out = tf.concat(values=[conv_out, tau], axis=1)
-        weight   = snt.Linear(1, name='attention_weight')(conv_out)
+        conv_out  = tf.concat(values=[conv_out, tau], axis=1)
+        weight    = snt.Linear(1, name='attention_weight')(conv_out)
         
         fc_out_list.append(fc_out)
         weight_list.append(weight)
@@ -161,7 +170,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     fc_out_list         = tf.concat(values=fc_out_list, axis=1) # (84, 1, 256)
     weight_list         = tf.concat(values=weight_list, axis=1) # (84, 1)
 
-    weights_soft_max    = tf.nn.softmax(weight_list) # (84, 1)
+    weights_soft_max    = tf.nn.softmax(weight_list)
     hidden_softmaxed    = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1) # (84, 256)
 
     # Append clipped last reward and one hot last action.
@@ -177,13 +186,21 @@ class SelfAttentionSubnet(snt.AbstractModule):
   
     # adding time dimension
     level_name     = tf.reshape(level_name, [-1, 1, 1])
+    # Reshaping as to seperate the time and batch dimensions
+    # We need to know the length of the time dimension, because it may differ in the initialization
+    # E.g the learner and actors have different size batch/time dimension
     baseline_games = tf.reshape(baseline_games, [tf.shape(level_name)[0], -1, self._number_of_games])
 
+    # Tile the time dimension 
     level_name = tf.tile(level_name, [1, tf.shape(baseline_games)[1], 1])
     baseline = tf.batch_gather(baseline_games, level_name)
+    # Reshape to the batch size - since Sonnet's BatchApply expects a time * batch dimension. 
     baseline = tf.reshape(baseline, [tf.shape(core_output)[0]])
 
+    # Consider the problem if we are not log odds instead of logs? 
+    # Multiply action and #games. When choosing an action we need to index into those. 
     policy_logits = snt.Linear(self._number_of_games * self._num_actions, name='policy_logits')(core_output) 
+    # (batch_size, time, games, action)
     policy_logits = tf.reshape(policy_logits, [tf.shape(level_name)[0], -1, self._number_of_games, self._num_actions])
     policy_logits = tf.batch_gather(policy_logits, level_name)
     policy_logits = tf.reshape(policy_logits, [tf.shape(core_output)[0], self._num_actions])
@@ -205,7 +222,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
   @snt.reuse_variables
   def unroll(self, actions, env_outputs, level_name):
     _, _, done, _ = env_outputs
-
+    # TODO: Cleanup - remove BatchApply since it clutters the code in head. 
     torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs, level_name))
 
     return snt.BatchApply(self._head)((torso_outputs, level_name))

@@ -62,7 +62,7 @@ flags.DEFINE_integer('unroll_length', 20, 'Unroll length in agent steps.')
 flags.DEFINE_integer('num_action_repeats', 4, 'Number of action repeats.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
 flags.DEFINE_string('level_name', 'PongNoFrameskip-v4', 'level name')
-flags.DEFINE_integer('multi_task', 0, 'Training on multiple games')
+flags.DEFINE_integer('multi_task', 1, 'Training on multiple games')
 
 # Loss settings.
 flags.DEFINE_float('entropy_cost', 0.01, 'Entropy cost/multiplier.')
@@ -489,7 +489,7 @@ def train(action_set, level_names):
 
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
           total_episode_frames = num_env_frames_v
-
+          # print("STAGE OP: ", stage_op)
           for level_name, episode_return, episode_step, acc_episode_reward, acc_episode_step in zip(
               level_names_v[done_v],
               infos_v.episode_return[done_v],
