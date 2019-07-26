@@ -132,11 +132,16 @@ class SelfAttentionSubnet(snt.AbstractModule):
     tau          = tf.tile(tau, [1, tf.shape(frame_2)[1], 1])
     tau          = tf.reshape(tau, [-1, self._number_of_games])
 
-    # TODO: Will have to experiment with these variables. 
-    h   = 4
-    d_k = 24
-    d_v = 24    
-    # 
+    # Self attnetion parameters
+    # TODO: Experiment with these dimensions. 
+    num_heads  = 4
+    dim_keys   = 24
+    dim_values = 24
+    out_chans  = 32
+    kernel     = 2
+    use_rel    = True    
+
+    # Dimension of the max pool 
     max_d = 16
 
     for i in range(self.sub_networks):
@@ -146,13 +151,16 @@ class SelfAttentionSubnet(snt.AbstractModule):
         conv_out = tf.nn.relu(conv_out)
 
         # Applying self attention 
-        conv_out = self_attention.augmented_conv2d(conv_out, 32, 2, d_k, d_v, h, True, batch_size)
+        conv_out = self_attention.augmented_conv2d(conv_out, out_chans, kernel, 
+                                                   dim_keys, dim_values, num_heads, 
+                                                   use_rel, batch_size)
+
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
 
         # Problem with the FC layer is that it cannot generalize across positions. 
-        # Unique connections are not generalizable.  
-        # Keeps the dimensions constant. 
+        # Unique connections are not generalizable. Keeps the dimensions constant. 
+        # Using max pool to generalize better. 
         max_d_out = snt.Conv2D(max_d, 3, stride=2)(conv_out)
         max_d_out = tf.keras.layers.GlobalMaxPool2D()(max_d_out)
         max_d_out = tf.nn.relu(max_d_out)
@@ -185,7 +193,10 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
   def _head(self, core_output):
     core_output, level_name = core_output
-    baseline_games = snt.Linear(self._number_of_games)(core_output)
+    # Using a shared value function first.
+    baseline_games = snt.Linear(1)(core_output)
+    # Then multiple value functions to account for the different scalings of rewards in different games.   
+    baseline_games = snt.Linear(self._number_of_games)(baseline_games)
   
     # adding time dimension
     level_name     = tf.reshape(level_name, [-1, 1, 1])
@@ -196,21 +207,12 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
     # Tile the time dimension 
     level_name = tf.tile(level_name, [1, tf.shape(baseline_games)[1], 1])
-    baseline = tf.batch_gather(baseline_games, level_name)
+    baseline   = tf.batch_gather(baseline_games, level_name)
     # Reshape to the batch size - since Sonnet's BatchApply expects a time * batch dimension. 
-    baseline = tf.reshape(baseline, [tf.shape(core_output)[0]])
-
-    # Multiply action and #games. When choosing an action we need to index into those. 
-    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output) 
-    # (batch_size, time, games, action)
-    # print("POLICY LOGITS: ", policy_logits)
-    # print("BATCH SIZE: ", tf.shape(level_name[0]))
-    # policy_logits = tf.reshape(policy_logits, [tf.shape(level_name)[0], -1, self._num_actions])
-    # print("LOGITS: ", policy_logits)
-    # policy_logits = tf.batch_gather(policy_logits, level_name)
-    # policy_logits = tf.reshape(policy_logits, [tf.shape(core_output)[0], self._num_actions])
+    baseline   = tf.reshape(baseline, [tf.shape(core_output)[0]])
 
     # Sample an action from the policy.
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output) 
     new_action = tf.multinomial(policy_logits, num_samples=1,
                                 output_dtype=tf.int32)
     new_action = tf.squeeze(new_action, 1, name='new_action')
