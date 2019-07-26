@@ -155,9 +155,11 @@ class SelfAttentionSubnet(snt.AbstractModule):
         # Keeps the dimensions constant. 
         max_d_out = snt.Conv2D(max_d, 3, stride=2)(conv_out)
         max_d_out = tf.keras.layers.GlobalMaxPool2D()(max_d_out)
+        max_d_out = tf.nn.relu(max_d_out)
         conv_out  = snt.BatchFlatten()(conv_out)
         
         fc_out    = snt.Linear(256 - max_d)(conv_out)
+        fc_out    = tf.nn.relu(fc_out)
         fc_out    = tf.concat([fc_out, max_d_out], axis=-1)
         fc_out    = tf.expand_dims(fc_out, axis=1)
 
@@ -171,7 +173,8 @@ class SelfAttentionSubnet(snt.AbstractModule):
     weight_list         = tf.concat(values=weight_list, axis=1) # (84, 1)
 
     weights_soft_max    = tf.nn.softmax(weight_list)
-    hidden_softmaxed    = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1) # (84, 256)
+    weights_soft_max    = tf.expand_dims(weights_soft_max, axis=2)
+    hidden_softmaxed    = tf.reduce_sum(weights_soft_max * fc_out_list, axis=1) # (84, 256)
 
     # Append clipped last reward and one hot last action.
     clipped_reward      = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
@@ -197,13 +200,15 @@ class SelfAttentionSubnet(snt.AbstractModule):
     # Reshape to the batch size - since Sonnet's BatchApply expects a time * batch dimension. 
     baseline = tf.reshape(baseline, [tf.shape(core_output)[0]])
 
-    # Consider the problem if we are not log odds instead of logs? 
     # Multiply action and #games. When choosing an action we need to index into those. 
-    policy_logits = snt.Linear(self._number_of_games * self._num_actions, name='policy_logits')(core_output) 
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output) 
     # (batch_size, time, games, action)
-    policy_logits = tf.reshape(policy_logits, [tf.shape(level_name)[0], -1, self._number_of_games, self._num_actions])
-    policy_logits = tf.batch_gather(policy_logits, level_name)
-    policy_logits = tf.reshape(policy_logits, [tf.shape(core_output)[0], self._num_actions])
+    # print("POLICY LOGITS: ", policy_logits)
+    # print("BATCH SIZE: ", tf.shape(level_name[0]))
+    # policy_logits = tf.reshape(policy_logits, [tf.shape(level_name)[0], -1, self._num_actions])
+    # print("LOGITS: ", policy_logits)
+    # policy_logits = tf.batch_gather(policy_logits, level_name)
+    # policy_logits = tf.reshape(policy_logits, [tf.shape(core_output)[0], self._num_actions])
 
     # Sample an action from the policy.
     new_action = tf.multinomial(policy_logits, num_samples=1,
