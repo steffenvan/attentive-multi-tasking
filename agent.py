@@ -207,14 +207,14 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
     # Tile the time dimension 
     level_name = tf.tile(level_name, [1, tf.shape(baseline_games)[1], 1])
-    baseline   = tf.batch_gather(baseline_games, level_name)
-    # Reshape to the batch size - since Sonnet's BatchApply expects a time * batch dimension. 
+    baseline   = tf.batch_gather(baseline_games, level_name)    # (batch_size, time, 1)
+    # Reshape to the batch size - because Sonnet's BatchApply expects a batch_size * time dimension. 
     baseline   = tf.reshape(baseline, [tf.shape(core_output)[0]])
 
     # Sample an action from the policy.
     policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output) 
-    new_action = tf.multinomial(policy_logits, num_samples=1,
-                                output_dtype=tf.int32)
+    new_action = tf.random.categorical(policy_logits, num_samples=1, 
+                                       dtype=tf.int32)
     new_action = tf.squeeze(new_action, 1, name='new_action')
 
     return ImpalaAgentOutput(new_action, policy_logits, baseline)
