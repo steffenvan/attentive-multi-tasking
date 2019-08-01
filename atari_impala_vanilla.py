@@ -488,8 +488,6 @@ def train(action_set, level_names):
               (data_from_actors.level_name,) + output + (stage_op,))
 
           level_names_v = np.repeat([level_names_v], done_v.shape[0], 0)
-          total_episode_frames = num_env_frames_v
-          # print("STAGE OP: ", stage_op)
           for level_name, episode_return, episode_step, acc_episode_reward, acc_episode_step in zip(
               level_names_v[done_v],
               infos_v.episode_return[done_v],
@@ -498,7 +496,6 @@ def train(action_set, level_names):
               infos_v.acc_episode_step[done_v]):
 
             episode_frames = episode_step * FLAGS.num_action_repeats
-            run_metadata = tf.RunMetadata()
             tf.logging.info('Level: %s Episode return: %f after %d frames',
                             level_name, episode_return, num_env_frames_v)
             
