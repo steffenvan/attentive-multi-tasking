@@ -77,6 +77,7 @@ class ImpalaSubnet(snt.AbstractModule):
 
     weights_soft_max = tf.nn.softmax(weight_list)
     hidden_softmaxed = tf.reduce_sum(weights_soft_max * conv_out_list, axis=4)
+    print("hidden: ", hidden_softmaxed)
   
     fc_out   = snt.BatchFlatten()(hidden_softmaxed)    
     fc_out   = snt.Linear(256)(fc_out)
@@ -143,7 +144,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     frame /= 255
     batch_size = tf.shape(frame)[0]
 
-    fc_out_list = []
+    conv_out_list = []
     weight_list = []
 
     one_hot_task = tf.one_hot(level_name, self._number_of_games)
@@ -174,23 +175,23 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
-        conv_out = snt.BatchFlatten()(conv_out)
-        weight   = snt.Linear(1, name='attention_weight')(tf.concat(values=[conv_out, tau], axis=1))
+        conv_flatten = snt.BatchFlatten()(conv_out)
+        weight   = snt.Linear(1, name='attention_weight')(tf.concat(values=[conv_flatten, tau], axis=1))
         
-        fc_out_list.append(conv_out)
+        conv_out_list.append(conv_out)
         weight_list.append(weight)
 
-    fc_out_list      = tf.concat(values=fc_out_list, axis=1) # (84, 1, 256)
-    weight_list      = tf.concat(values=weight_list, axis=1) # (84, 1)
+    conv_out_list = tf.stack(values=conv_out_list, axis=-1)
+    weight_list   = tf.stack(values=weight_list, axis=-1)
+    weight_list   = tf.reshape(weight_list, [-1, 1, 1, 1, self.sub_networks])
 
     # Calculating the attention weights
     weights_soft_max = tf.nn.softmax(weight_list)
-    weights_soft_max = tf.expand_dims(weights_soft_max, axis=2)
-    hidden_softmaxed = tf.reduce_sum(weights_soft_max * fc_out_list, axis=1) # (84, 256)
+    hidden_softmaxed = tf.reduce_sum(weights_soft_max * conv_out_list, axis=4) # (84, 256)
 
     # Last fully connected layer
     fc_out  = snt.BatchFlatten()(hidden_softmaxed)
-    fc_out  = snt.Linear(256)(conv_out)
+    fc_out  = snt.Linear(256)(fc_out)
     fc_out  = tf.nn.relu(fc_out)
 
     # Append clipped last reward and one hot last action.
