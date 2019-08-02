@@ -48,7 +48,6 @@ flags.DEFINE_string('agent_name', 'ImpalaFeedForward', 'Which learner to use')
 flags.DEFINE_integer('use_simplified', 0, 'Which subnetwork agent to use.')
 flags.DEFINE_integer('subnets', 1, 'How many subnetworks to use.')
 
-
 # Atari environments
 flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
@@ -85,7 +84,6 @@ ActorOutput = collections.namedtuple(
 ActorOutputFeedForward = collections.namedtuple(
     'ActorOutputFeedForward', 'level_name level_id env_outputs agent_outputs')
 
-
 # Used to map the level name -> number for indexation
 game_id = {}
 games = utilities_atari.ATARI_GAMES.keys()
@@ -107,14 +105,12 @@ def compute_entropy_loss(logits):
   entropy_per_timestep = tf.reduce_sum(-policy * log_policy, axis=-1)
   return -tf.reduce_sum(entropy_per_timestep)
 
-
 def compute_policy_gradient_loss(logits, actions, advantages):
   cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
       labels=actions, logits=logits)
   advantages = tf.stop_gradient(advantages)
   policy_gradient_loss_per_timestep = cross_entropy * advantages
   return tf.reduce_sum(policy_gradient_loss_per_timestep)
-
 
 def build_actor(agent, env, level_name, action_set):
   """Builds the actor loop."""
