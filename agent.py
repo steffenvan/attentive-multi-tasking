@@ -31,6 +31,7 @@ class ImpalaSubnet(snt.AbstractModule):
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
     self.use_simplified = FLAGS.use_simplified
+    self.use_conv_attention = True
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -39,7 +40,7 @@ class ImpalaSubnet(snt.AbstractModule):
     frame = tf.to_float(frame)
     frame /= 255
 
-    fc_out_list = []
+    conv_out_list = []
     weight_list = []
 
     one_hot_task = tf.one_hot(level_name, self._number_of_games)
@@ -49,43 +50,64 @@ class ImpalaSubnet(snt.AbstractModule):
     tau          = tf.reshape(tau, [-1, self._number_of_games])
 
     for i in range(self.sub_networks):
-      conv_out = frame
-      conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
-      conv_out = tf.nn.relu(conv_out)
-      
       with tf.variable_scope('subnetwork_' + str(i)):
-        fc_out   = snt.BatchFlatten()(conv_out)
-        fc_out   = snt.Linear(256)(fc_out)
-        fc_out   = tf.expand_dims(fc_out, axis=1)
+        conv_out = frame
+        conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
+        conv_out = tf.nn.relu(conv_out)
+        conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
+        conv_out = tf.nn.relu(conv_out)
+        # conv_out = tf.keras.layers.GlobalMaxPooling2D()(conv_out)
+        # conv_out = tf.concat(values=[conv_out, tau], axis=1)
 
-        conv_out = tf.keras.layers.GlobalMaxPooling2D()(conv_out)
-        conv_out = tf.concat(values=[conv_out, tau], axis=1)
-        weight   = snt.Linear(1, name='weights')(conv_out)
+        if self.use_conv_attention:
+          conv_attention = snt.Conv2D(1, 3, stride=1)(conv_out)
+          weight = tf.keras.layers.GlobalAveragePooling2D()(conv_attention)
+          weight = snt.Linear(1, name='weights')(tf.concat([weight, tau], axis=1))
+        else:
+          temp_flatten = snt.BatchFlatten()(conv_out)
+          weight   = snt.Linear(1, name='weights')(tf.concat([temp_flatten, tau], axis=1))
         
-        fc_out_list.append(fc_out)
+        conv_out_list.append(conv_out)
         weight_list.append(weight)
 
-    fc_out_list = tf.concat(values=fc_out_list, axis=1)
-    weight_list = tf.concat(values=weight_list, axis=1)
+
+    conv_out_list = tf.stack(values=conv_out_list, axis=-1)
+    weight_list   = tf.stack(values=weight_list, axis=-1)
+    weight_list   = tf.reshape(weight_list, [-1, 1, 1, 1, self.sub_networks])
 
     weights_soft_max = tf.nn.softmax(weight_list)
-    hidden_softmaxed = tf.reduce_sum(tf.expand_dims(weights_soft_max, axis=2) * fc_out_list, axis=1)
+    hidden_softmaxed = tf.reduce_sum(weights_soft_max * conv_out_list, axis=4)
+  
+    fc_out   = snt.BatchFlatten()(hidden_softmaxed)    
+    fc_out   = snt.Linear(256)(fc_out)
+    # fc_out   = tf.expand_dims(fc_out, axis=1)
     # Append clipped last reward and one hot last action.
     clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
     one_hot_last_action = tf.one_hot(last_action, self._num_actions)
     return tf.concat(
-        [hidden_softmaxed, clipped_reward, one_hot_last_action],
+        [fc_out, clipped_reward, one_hot_last_action],
         axis=1)
 
   def _head(self, core_output):
-    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output)
-    baseline = tf.squeeze(snt.Linear(1, name='baseline')(core_output), axis=-1)
+    core_output, level_name = core_output
+    baseline_games = snt.Linear(self._number_of_games)(core_output)
+    # adding time dimension
+    level_name     = tf.reshape(level_name, [-1, 1, 1])
+    # Reshaping as to seperate the time and batch dimensions
+    # We need to know the length of the time dimension, because it may differ in the initialization
+    # E.g the learner and actors have different size batch/time dimension
+    baseline_games = tf.reshape(baseline_games, [tf.shape(level_name)[0], -1, self._number_of_games])
 
+    # Tile the time dimension 
+    level_name = tf.tile(level_name, [1, tf.shape(baseline_games)[1], 1])
+    baseline   = tf.batch_gather(baseline_games, level_name)    # (batch_size, time, 1)
+    # Reshape to the batch size - because Sonnet's BatchApply expects a batch_size * time dimension. 
+    baseline   = tf.reshape(baseline, [tf.shape(core_output)[0]])
+    
     # Sample an action from the policy.
-    new_action = tf.multinomial(policy_logits, num_samples=1,
-                                output_dtype=tf.int32)
+    policy_logits = snt.Linear(self._num_actions, name='policy_logits')(core_output) 
+    new_action = tf.random.categorical(policy_logits, num_samples=1, 
+                                       dtype=tf.int32)
     new_action = tf.squeeze(new_action, 1, name='new_action')
 
     return ImpalaAgentOutput(new_action, policy_logits, baseline)
@@ -99,11 +121,9 @@ class ImpalaSubnet(snt.AbstractModule):
 
   @snt.reuse_variables
   def unroll(self, actions, env_outputs, level_name):
-    _, _, done, _ = env_outputs
 
     torso_outputs = snt.BatchApply(self._torso)((actions, env_outputs, level_name))
-
-    return snt.BatchApply(self._head)(torso_outputs)
+    return snt.BatchApply(self._head)((torso_outputs, level_name))
 
 class SelfAttentionSubnet(snt.AbstractModule):
   """Agent with subnetworks and self-attention."""
