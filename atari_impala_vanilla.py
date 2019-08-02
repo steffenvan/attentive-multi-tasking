@@ -83,7 +83,7 @@ ActorOutput = collections.namedtuple(
     'ActorOutput', 'level_name agent_state env_outputs agent_outputs')
 
 ActorOutputFeedForward = collections.namedtuple(
-    'ActorOutputFeedForward', 'level_name env_outputs agent_outputs')
+    'ActorOutputFeedForward', 'level_name level_id env_outputs agent_outputs')
 
 
 # Used to map the level name -> number for indexation
@@ -192,6 +192,7 @@ def build_actor(agent, env, level_name, action_set):
 
     output = ActorOutputFeedForward(
         level_name=level_name, 
+        level_id=game_id[level_name],
         env_outputs=full_env_outputs,
         agent_outputs=full_agent_outputs)
     # No backpropagation should be done here.
@@ -444,9 +445,9 @@ def train(action_set, level_names):
         # Returns an ActorOutput tuple -> (level name, agent_state, env_outputs, agent_output)
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
-        levels_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32, parallel_iterations=56)
-        levels_index = tf.reshape(levels_index, [FLAGS.batch_size])
-
+        # levels_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32, parallel_iterations=56)
+        # levels_index = tf.reshape(levels_index, [FLAGS.batch_size])
+        levels_index = data_from_actors.level_id
         # Unroll agent on sequence, create losses and update ops.
         output = build_learner(agent,
                                data_from_actors.env_outputs,
