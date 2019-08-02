@@ -161,9 +161,6 @@ class SelfAttentionSubnet(snt.AbstractModule):
     kernel     = 2
     use_rel    = True    
 
-    # Dimension of the max pool 
-    max_d = 16
-
     for i in range(self.sub_networks):
       with tf.variable_scope('subnetwork_' + str(i)):
         conv_out = frame
@@ -177,46 +174,38 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
-
-        # Problem with the FC layer is that it cannot generalize across positions. 
-        # Unique connections are not generalizable. Keeps the dimensions constant. 
-        # Using max pool to generalize better. 
-        max_d_out = snt.Conv2D(max_d, 3, stride=2)(conv_out)
-        max_d_out = tf.keras.layers.GlobalMaxPool2D()(max_d_out)
-        max_d_out = tf.nn.relu(max_d_out)
-        conv_out  = snt.BatchFlatten()(conv_out)
+        conv_out = snt.BatchFlatten()(conv_out)
+        weight   = snt.Linear(1, name='attention_weight')(tf.concat(values=[conv_out, tau], axis=1))
         
-        fc_out    = snt.Linear(256 - max_d)(conv_out)
-        fc_out    = tf.nn.relu(fc_out)
-        fc_out    = tf.concat([fc_out, max_d_out], axis=-1)
-        fc_out    = tf.expand_dims(fc_out, axis=1)
-
-        conv_out  = tf.concat(values=[conv_out, tau], axis=1)
-        weight    = snt.Linear(1, name='attention_weight')(conv_out)
-        
-        fc_out_list.append(fc_out)
+        fc_out_list.append(conv_out)
         weight_list.append(weight)
 
-    fc_out_list         = tf.concat(values=fc_out_list, axis=1) # (84, 1, 256)
-    weight_list         = tf.concat(values=weight_list, axis=1) # (84, 1)
+    fc_out_list      = tf.concat(values=fc_out_list, axis=1) # (84, 1, 256)
+    weight_list      = tf.concat(values=weight_list, axis=1) # (84, 1)
 
-    weights_soft_max    = tf.nn.softmax(weight_list)
-    weights_soft_max    = tf.expand_dims(weights_soft_max, axis=2)
-    hidden_softmaxed    = tf.reduce_sum(weights_soft_max * fc_out_list, axis=1) # (84, 256)
+    # Calculating the attention weights
+    weights_soft_max = tf.nn.softmax(weight_list)
+    weights_soft_max = tf.expand_dims(weights_soft_max, axis=2)
+    hidden_softmaxed = tf.reduce_sum(weights_soft_max * fc_out_list, axis=1) # (84, 256)
+
+    # Last fully connected layer
+    fc_out  = snt.BatchFlatten()(hidden_softmaxed)
+    fc_out  = snt.Linear(256)(conv_out)
+    fc_out  = tf.nn.relu(fc_out)
 
     # Append clipped last reward and one hot last action.
     clipped_reward      = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
     one_hot_last_action = tf.one_hot(last_action, self._num_actions)
     return tf.concat(
-        [hidden_softmaxed, clipped_reward, one_hot_last_action],
+        [fc_out, clipped_reward, one_hot_last_action],
         axis=1)
 
   def _head(self, core_output):
     core_output, level_name = core_output
     # Using a shared value function first.
-    baseline_games = snt.Linear(1)(core_output)
+    # baseline_games = snt.Linear(1)(core_output)
     # Then multiple value functions to account for the different scalings of rewards in different games.   
-    baseline_games = snt.Linear(self._number_of_games)(baseline_games)
+    baseline_games = snt.Linear(self._number_of_games)(core_output)
   
     # adding time dimension
     level_name     = tf.reshape(level_name, [-1, 1, 1])
