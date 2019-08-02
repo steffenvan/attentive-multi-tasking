@@ -444,7 +444,7 @@ def train(action_set, level_names):
         # Returns an ActorOutput tuple -> (level name, agent_state, env_outputs, agent_output)
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
-        levels_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32)
+        levels_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32, parallel_iterations=56)
         levels_index = tf.reshape(levels_index, [FLAGS.batch_size])
 
         # Unroll agent on sequence, create losses and update ops.
