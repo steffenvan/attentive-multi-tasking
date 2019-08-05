@@ -82,7 +82,7 @@ def rel_to_abs(x):
 
 def augmented_conv2d(inputs, output_channels, kernel_shape, dim_keys, dim_values, num_heads, use_relative, batch_size):
     
-    conv_out = tf.layers.conv2d(inputs, output_channels - dim_values, kernel_shape)
+    conv_out = tf.layers.conv2d(inputs, output_channels - dim_values, kernel_shape, padding="same")
     flat_q, flat_k, flat_v, H, W = compute_flat_qkv(inputs, dim_keys, dim_values, num_heads)
     logits = tf.matmul(flat_q, flat_k, transpose_b=True)
     if use_relative:

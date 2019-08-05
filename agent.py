@@ -174,7 +174,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
                                                    use_rel, batch_size)
 
         conv_out = tf.nn.relu(conv_out)
-        conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
+        conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2, padding="SAME")(conv_out)
         conv_flatten = snt.BatchFlatten()(conv_out)
         weight   = snt.Linear(1, name='attention_weight')(tf.concat(values=[conv_flatten, tau], axis=1))
         
