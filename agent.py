@@ -31,7 +31,7 @@ class ImpalaSubnet(snt.AbstractModule):
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
     self.use_simplified = FLAGS.use_simplified
-    self.use_conv_attention = True
+    self.use_conv_attention = False
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -56,8 +56,6 @@ class ImpalaSubnet(snt.AbstractModule):
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
         conv_out = tf.nn.relu(conv_out)
-        # conv_out = tf.keras.layers.GlobalMaxPooling2D()(conv_out)
-        # conv_out = tf.concat(values=[conv_out, tau], axis=1)
 
         if self.use_conv_attention:
           conv_attention = snt.Conv2D(1, 3, stride=1)(conv_out)
@@ -77,7 +75,6 @@ class ImpalaSubnet(snt.AbstractModule):
 
     weights_soft_max = tf.nn.softmax(weight_list)
     hidden_softmaxed = tf.reduce_sum(weights_soft_max * conv_out_list, axis=4)
-    print("hidden: ", hidden_softmaxed)
   
     fc_out   = snt.BatchFlatten()(hidden_softmaxed)    
     fc_out   = snt.Linear(256)(fc_out)
