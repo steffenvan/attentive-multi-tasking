@@ -56,12 +56,10 @@ class ImpalaSubnet(snt.AbstractModule):
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
         conv_out = tf.nn.relu(conv_out)
-        # conv_out = tf.keras.layers.GlobalMaxPooling2D()(conv_out)
-        # conv_out = tf.concat(values=[conv_out, tau], axis=1)
 
         if self.use_conv_attention:
-          conv_attention = snt.Conv2D(1, 3, stride=1)(conv_out)
-          weight = tf.keras.layers.GlobalAveragePooling2D()(conv_attention)
+        #   conv_attention = snt.Conv2D(1, 3, stride=1)(conv_out)
+          weight = tf.keras.layers.GlobalAveragePooling2D()(conv_out)
           weight = snt.Linear(1, name='weights')(tf.concat([weight, tau], axis=1))
         else:
           temp_flatten = snt.BatchFlatten()(conv_out)
@@ -77,7 +75,6 @@ class ImpalaSubnet(snt.AbstractModule):
 
     weights_soft_max = tf.nn.softmax(weight_list)
     hidden_softmaxed = tf.reduce_sum(weights_soft_max * conv_out_list, axis=4)
-    print("hidden: ", hidden_softmaxed)
   
     fc_out   = snt.BatchFlatten()(hidden_softmaxed)    
     fc_out   = snt.Linear(256)(fc_out)
@@ -174,7 +171,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
                                                    use_rel, batch_size)
 
         conv_out = tf.nn.relu(conv_out)
-        conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2)(conv_out)
+        conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2, padding="SAME")(conv_out)
         conv_flatten = snt.BatchFlatten()(conv_out)
         weight   = snt.Linear(1, name='attention_weight')(tf.concat(values=[conv_flatten, tau], axis=1))
         
