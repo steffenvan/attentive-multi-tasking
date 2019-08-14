@@ -479,6 +479,10 @@ def train(action_set, level_names):
         num_env_frames_v = 0
         
         print("total params:", np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
+        vas = tf.trainable_variables()
+        for elem in vas:
+          print(elem)
+        print("Params: ", [v.get_shape().as_list() for v in tf.trainable_variables()])
         
         while num_env_frames_v < FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
