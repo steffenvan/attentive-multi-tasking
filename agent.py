@@ -164,7 +164,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
         conv_out = frame
         conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
         conv_out = tf.nn.relu(conv_out)
-
+        print("conv: ", conv_out)
         # Applying self attention 
         conv_out = self_attention.augmented_conv2d(conv_out, out_chans, kernel, 
                                                    dim_keys, dim_values, num_heads, 
