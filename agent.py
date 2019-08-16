@@ -31,7 +31,7 @@ class ImpalaSubnet(snt.AbstractModule):
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
     self.use_simplified = FLAGS.use_simplified
-    self.use_conv_attention = False
+    self.use_conv_attention = True
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
