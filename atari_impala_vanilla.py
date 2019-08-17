@@ -498,8 +498,8 @@ def train(action_set, level_names):
               infos_v.acc_episode_step[done_v]):
 
             episode_frames = episode_step * FLAGS.num_action_repeats
-            tf.logging.info('Level: %s Episode return: %f after %d frames',
-                            level_name, episode_return, num_env_frames_v)
+            tf.logging.info('Level: %s Episode return: %f Acc return %f after %d frames',
+                            level_name, episode_return, acc_episode_reward, num_env_frames_v)
             
             summary = tf.summary.Summary()
             summary.value.add(tag=level_name + '/episode_return',
