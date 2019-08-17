@@ -53,7 +53,7 @@ flags.DEFINE_integer('width', 84, 'Width of observation')
 flags.DEFINE_integer('height', 84, 'Height of observation')
 
 # Environment settings
-flags.DEFINE_integer('total_environment_frames', int(5e8),
+flags.DEFINE_integer('total_environment_frames', int(6e8),
                      'Total environment frames to train for.')
 flags.DEFINE_integer('num_actors', 16, 'Number of actors.')
 flags.DEFINE_integer('batch_size', 8, 'Batch size for training.')
