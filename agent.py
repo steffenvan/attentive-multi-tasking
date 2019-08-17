@@ -30,7 +30,6 @@ class ImpalaSubnet(snt.AbstractModule):
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
-    self.use_simplified = FLAGS.use_simplified
     self.use_conv_attention = True
 
   def _torso(self, input_):
@@ -132,6 +131,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
+    self.use_conv_attention = True
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -164,7 +164,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
         conv_out = frame
         conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
         conv_out = tf.nn.relu(conv_out)
-        print("conv: ", conv_out)
+
         # Applying self attention 
         conv_out = self_attention.augmented_conv2d(conv_out, out_chans, kernel, 
                                                    dim_keys, dim_values, num_heads, 
@@ -172,8 +172,13 @@ class SelfAttentionSubnet(snt.AbstractModule):
 
         conv_out = tf.nn.relu(conv_out)
         conv_out = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2, padding="SAME")(conv_out)
-        conv_flatten = snt.BatchFlatten()(conv_out)
-        weight   = snt.Linear(1, name='attention_weight')(tf.concat(values=[conv_flatten, tau], axis=1))
+        if self.use_conv_attention:
+          #   conv_attention = snt.Conv2D(1, 3, stride=1)(conv_out)
+          weight = tf.keras.layers.GlobalAveragePooling2D()(conv_out)
+          weight = snt.Linear(1, name='gap_weights')(tf.concat([weight, tau], axis=1))
+        else:
+          temp_flatten = snt.BatchFlatten()(conv_out)
+          weight   = snt.Linear(1, name='fc_weights')(tf.concat([temp_flatten, tau], axis=1))
         
         conv_out_list.append(conv_out)
         weight_list.append(weight)
