@@ -31,6 +31,7 @@ class ImpalaSubnet(snt.AbstractModule):
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
     self.use_conv_attention = True
+    self.use_separate_attn_net = FLAGS.use_separate_attn_net
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -48,28 +49,42 @@ class ImpalaSubnet(snt.AbstractModule):
     tau          = tf.tile(tau, [1, tf.shape(frame_2)[1], 1])
     tau          = tf.reshape(tau, [-1, self._number_of_games])
 
-    for i in range(self.sub_networks):
+    for i in range(self.sub_networks + FLAGS.use_separate_attn_net):
       with tf.variable_scope('subnetwork_' + str(i)):
         conv_out = frame
         conv_out = snt.Conv2D(16, 8, stride=4)(conv_out)
         conv_out = tf.nn.relu(conv_out)
         conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
         conv_out = tf.nn.relu(conv_out)
-
-        if self.use_conv_attention:
-        #   conv_attention = snt.Conv2D(1, 3, stride=1)(conv_out)
-          weight = tf.keras.layers.GlobalAveragePooling2D()(conv_out)
-          weight = snt.Linear(1, name='weights')(tf.concat([weight, tau], axis=1))
-        else:
-          temp_flatten = snt.BatchFlatten()(conv_out)
-          weight   = snt.Linear(1, name='weights')(tf.concat([temp_flatten, tau], axis=1))
         
-        conv_out_list.append(conv_out)
-        weight_list.append(weight)
-
+        # check if attention needs to be calculated by this subnetwork.
+        if not FLAGS.use_separate_attn_net or i == self.sub_networks:
+          n_weights = 1 if not FLAGS.use_separate_attn_net else self.sub_networks
+          if self.use_conv_attention:
+          #   conv_attention = snt.Conv2D(1, 3, stride=1)(conv_out)
+            weight = tf.keras.layers.GlobalAveragePooling2D()(conv_out)
+            weight = snt.Linear(n_weights, name='weights')(tf.concat([weight, tau], axis=1))
+          else:
+            temp_flatten = snt.BatchFlatten()(conv_out)
+            weight   = snt.Linear(n_weights, name='weights')(tf.concat([temp_flatten, tau], axis=1))
+        
+        # To ensure the separate attention network does not add to the conv output. 
+        # We do not check for use_separate_attn_net because it's implied when we are in the network. 
+        if not i == self.sub_networks:
+          conv_out_list.append(conv_out)
+        
+        # Checks if we add the attention weight scalars sequentially from the subnetworks or from the separate network as a tensor. 
+        if not FLAGS.use_separate_attn_net:
+          weight_list.append(weight)    
+        elif i == self.sub_networks:
+          weight_list = weight
 
     conv_out_list = tf.stack(values=conv_out_list, axis=-1)
-    weight_list   = tf.stack(values=weight_list, axis=-1)
+    
+    # We would already have the weights stacked if we use a separate attention network. 
+    if not FLAGS.use_separate_attn_net:
+      weight_list   = tf.stack(values=weight_list, axis=-1)
+
     weight_list   = tf.reshape(weight_list, [-1, 1, 1, 1, self.sub_networks])
 
     weights_soft_max = tf.nn.softmax(weight_list)
@@ -156,7 +171,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     dim_keys   = 24
     dim_values = 24
     out_chans  = 32
-    kernel     = 2
+    kernel     = 4
     use_rel    = True    
 
     for i in range(self.sub_networks):
