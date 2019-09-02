@@ -30,7 +30,7 @@ class ImpalaSubnet(snt.AbstractModule):
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
-    self.use_conv_attention = True
+    self.use_conv_attention = False
     self.use_separate_attn_net = FLAGS.use_separate_attn_net
 
   def _torso(self, input_):
@@ -57,7 +57,7 @@ class ImpalaSubnet(snt.AbstractModule):
         conv_out = snt.Conv2D(32, 4, stride=2)(conv_out)
         conv_out = tf.nn.relu(conv_out)
         
-        # check if attention needs to be calculated by this subnetwork.
+        # Checks if attention needs to be calculated by this subnetwork.
         if not FLAGS.use_separate_attn_net or i == self.sub_networks:
           n_weights = 1 if not FLAGS.use_separate_attn_net else self.sub_networks
           if self.use_conv_attention:
@@ -73,7 +73,8 @@ class ImpalaSubnet(snt.AbstractModule):
         if not i == self.sub_networks:
           conv_out_list.append(conv_out)
         
-        # Checks if we add the attention weight scalars sequentially from the subnetworks or from the separate network as a tensor. 
+        # Checks if we add the attention weight scalars sequentially from the subnetworks 
+        # or from the separate network as a tensor. 
         if not FLAGS.use_separate_attn_net:
           weight_list.append(weight)    
         elif i == self.sub_networks:
@@ -86,13 +87,12 @@ class ImpalaSubnet(snt.AbstractModule):
       weight_list   = tf.stack(values=weight_list, axis=-1)
 
     weight_list   = tf.reshape(weight_list, [-1, 1, 1, 1, self.sub_networks])
-
     weights_soft_max = tf.nn.softmax(weight_list)
     hidden_softmaxed = tf.reduce_sum(weights_soft_max * conv_out_list, axis=4)
   
     fc_out   = snt.BatchFlatten()(hidden_softmaxed)    
     fc_out   = snt.Linear(256)(fc_out)
-    # fc_out   = tf.expand_dims(fc_out, axis=1)
+
     # Append clipped last reward and one hot last action.
     clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
     one_hot_last_action = tf.one_hot(last_action, self._num_actions)
@@ -146,7 +146,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     self._num_actions = num_actions
     self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
-    self.use_conv_attention = True
+    self.use_conv_attention = False
 
   def _torso(self, input_):
     last_action, env_output, level_name = input_
@@ -171,7 +171,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     dim_keys   = 24
     dim_values = 24
     out_chans  = 32
-    kernel     = 4
+    kernel     = 2
     use_rel    = True    
 
     for i in range(self.sub_networks):
