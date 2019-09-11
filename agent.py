@@ -43,11 +43,14 @@ class ImpalaSubnet(snt.AbstractModule):
     conv_out_list = []
     weight_list = []
 
-    one_hot_task = tf.one_hot(level_name, self._number_of_games)
-    tau          = tf.reshape(one_hot_task, [-1, 1, self._number_of_games])
-    frame_2      = tf.reshape(frame, [tf.shape(tau)[0], -1, 84 * 84 * 4])
-    tau          = tf.tile(tau, [1, tf.shape(frame_2)[1], 1])
-    tau          = tf.reshape(tau, [-1, self._number_of_games])
+    # Initializing one-hot encoding vector for each environment 
+    one_hot_task   = tf.one_hot(level_name, self._num_games)
+    tau            = tf.reshape(one_hot_task, [-1, 1, self._num_games])
+
+    flattened_dims = tf.shape(frame)[1] * tf.shape(frame)[2] * tf.shape(frame)[3] # 84 * 84 * 4
+    frame_copy     = tf.reshape(frame, [tf.shape(tau)[0], -1, flattened_dims])
+    tau            = tf.tile(tau, [1, tf.shape(frame_copy)[1], 1])
+    tau            = tf.reshape(tau, [-1, self._num_games])
 
     for i in range(self.sub_networks + FLAGS.use_separate_attn_net):
       with tf.variable_scope('subnetwork_' + str(i)):
@@ -61,11 +64,11 @@ class ImpalaSubnet(snt.AbstractModule):
         if not FLAGS.use_separate_attn_net or i == self.sub_networks:
           n_weights = 1 if not FLAGS.use_separate_attn_net else self.sub_networks
           if self.use_gap:
-            weight = tf.keras.layers.GlobalAveragePooling2D()(conv_out)
-            weight = snt.Linear(n_weights, name='weights')(tf.concat([weight, tau], axis=1))
+            gap_out = tf.keras.layers.GlobalAveragePooling2D()(conv_out)
+            weight = snt.Linear(n_weights, name='weights')(tf.concat([gap_out, tau], axis=1))
           else:
-            temp_flatten = snt.BatchFlatten()(conv_out)
-            weight   = snt.Linear(n_weights, name='weights')(tf.concat([temp_flatten, tau], axis=1))
+            flattened_feature_map = snt.BatchFlatten()(conv_out)
+            weight   = snt.Linear(n_weights, name='weights')(tf.concat([flattened_feature_map, tau], axis=1))
         
         # To ensure the separate attention network does not add to the conv output. 
         # We do not check for use_separate_attn_net because it's implied when we are in the network. 
@@ -85,12 +88,15 @@ class ImpalaSubnet(snt.AbstractModule):
     if not FLAGS.use_separate_attn_net:
       weight_list   = tf.stack(values=weight_list, axis=-1)
 
-    weight_list   = tf.reshape(weight_list, [-1, 1, 1, 1, self.sub_networks])
+    weight_list      = tf.reshape(weight_list, [-1, 1, 1, 1, self.sub_networks])
     weights_soft_max = tf.nn.softmax(weight_list)
     hidden_softmaxed = tf.reduce_sum(weights_soft_max * conv_out_list, axis=4)
   
+    # Last fully connected layer that we send to the policy and value functions. 
     fc_out   = snt.BatchFlatten()(hidden_softmaxed)    
     fc_out   = snt.Linear(256)(fc_out)
+    fc_out   = tf.nn.relu(fc_out)
+
 
     # Append clipped last reward and one hot last action.
     clipped_reward = tf.expand_dims(tf.clip_by_value(reward, -1, 1), -1)
