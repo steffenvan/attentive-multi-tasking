@@ -44,13 +44,13 @@ class ImpalaSubnet(snt.AbstractModule):
     weight_list = []
 
     # Initializing one-hot encoding vector for each environment 
-    one_hot_task   = tf.one_hot(level_name, self._num_games)
-    tau            = tf.reshape(one_hot_task, [-1, 1, self._num_games])
+    one_hot_task   = tf.one_hot(level_name, self._number_of_games)
+    tau            = tf.reshape(one_hot_task, [-1, 1, self._number_of_games])
 
     flattened_dims = tf.shape(frame)[1] * tf.shape(frame)[2] * tf.shape(frame)[3] # 84 * 84 * 4
     frame_copy     = tf.reshape(frame, [tf.shape(tau)[0], -1, flattened_dims])
     tau            = tf.tile(tau, [1, tf.shape(frame_copy)[1], 1])
-    tau            = tf.reshape(tau, [-1, self._num_games])
+    tau            = tf.reshape(tau, [-1, self._number_of_games])
 
     for i in range(self.sub_networks + FLAGS.use_separate_attn_net):
       with tf.variable_scope('subnetwork_' + str(i)):
