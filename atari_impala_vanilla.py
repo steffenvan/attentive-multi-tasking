@@ -46,6 +46,7 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
 # Agent
 flags.DEFINE_string('agent_name', 'ImpalaFeedForward', 'Which learner to use')
 flags.DEFINE_integer('use_separate_attn_net', 0, 'Which subnetwork agent to use.')
+flags.DEFINE_integer('use_gap', 0, 'Global average pooling or fully connected layer for attention weights in the subnetworks.')
 flags.DEFINE_integer('subnets', 1, 'How many subnetworks to use.')
 
 
