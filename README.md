@@ -1,21 +1,20 @@
-# Attentive multi-tasking
+# Attentive Multi-Tasking
+This repository contains the code for my bachelor thesis in multi-task reinforcement learning. 
+It incorporates the idea from: [AMT](https://arxiv.org/abs/1907.02874) into [IMPALA](https://arxiv.org/abs/1804.00168]) to increase the sample efficiency training.
 
-## Current status
-- PopArt normalization in a multi-task environment according to [(Hessel et al., 2018)](https://arxiv.org/abs/1809.04474) 
-- All humand and random scores for the 57 Atari games are now included in `utilities_atari.py`. 
-
-## TODO 
-- Add PNN?
+## Extensions: 
+- [IMPALA with PopArt](https://arxiv.org/abs/1809.04474) has been implemented. 
+- An additional self-attention mechanism has been adopted to each subnetwork. 
 
 ## Running the agent
 
 ### Dependencies
 
-- [TensorFlow][tensorflow] >=1.9.0
+- [TensorFlow][tensorflow] 1.13.0
 - [DeepMind Sonnet][sonnet].
 - [Atari](http://gym.openai.com/) 
-- [DeepMind Lab][deepmind_lab] (if you want to try the original implementation `experiment.py`).  
-There is a [Dockerfile][dockerfile] that serves as a reference for the
+
+There is a [Dockerfile][dockerfile] which serves as a reference for the
 pre-requisites and commands needed to run the code.
 
 ### Local single machine training on multiple atari games. 
@@ -54,7 +53,6 @@ python atari_experiment.py --mode=test --level_name=BreakoutNoFrameSkip-v4 \
     --test_num_episodes=10
 ```
 
-This work is an extension to [IMPALA](https://arxiv.org/abs/1804.00168]) (Espeholt et al. 2018) and [IMPALA with PopArt](https://arxiv.org/abs/1809.04474) (Hessel et al. 2018) and their recent result with improving distributed deep reinforcement learning.  
 
 [arxiv]: https://arxiv.org/abs/1802.01561
 [deepmind_lab]: https://github.com/deepmind/lab
