@@ -11,6 +11,7 @@ import os
 import sys
 #from more_itertools import one 
 import utilities_atari
+from utilities_atari import compute_human_normalized_score
 import atari_environment
 import numpy as np
 import py_process
