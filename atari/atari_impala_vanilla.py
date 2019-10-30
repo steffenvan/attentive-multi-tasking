@@ -9,6 +9,7 @@ import contextlib
 import functools
 import os
 import sys
+sys.path.append("..")
 #from more_itertools import one 
 import utilities_atari
 import atari_environment
