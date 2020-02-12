@@ -1,7 +1,9 @@
 import tensorflow as tf
 nest = tf.contrib.framework.nest
-import atari_utils
-from flags import *
+import sys
+sys.path.append('../')
+from utils import atari_utils
+from .flags import *
 import collections
 
 # Structure to be sent from actors to learner.
@@ -9,7 +11,7 @@ ActorOutput = collections.namedtuple(
     'ActorOutput', 'level_name agent_state env_outputs agent_outputs')
 
 ActorOutputFeedForward = collections.namedtuple(
-    'ActorOutputFeedForward', 'level_name level_id env_outputs agent_outputs')
+    'ActorOutputFeedForward', 'level_name env_outputs agent_outputs')
 
 # Used to map the level name -> number for indexation
 game_id = {}
@@ -25,8 +27,7 @@ def build_actor(agent, env, level_name, action_set):
 
   initial_action = tf.zeros([1], dtype=tf.int32)
   dummy_agent_output = agent((initial_action, 
-                              nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output),
-                              tf.constant(game_id[level_name], shape=[1])))
+                              nest.map_structure(lambda t: tf.expand_dims(t, 0), initial_env_output)))
   initial_agent_output = nest.map_structure(
       lambda t: tf.zeros(t.shape, t.dtype), dummy_agent_output)
 
@@ -49,7 +50,7 @@ def build_actor(agent, env, level_name, action_set):
     action = agent_output[0]
     batched_env_output = nest.map_structure(lambda t: tf.expand_dims(t, 0),
                                             env_output)
-    agent_output = agent((action, batched_env_output, tf.constant(game_id[level_name], shape=[1])))
+    agent_output = agent((action, batched_env_output))
 
     # Convert action index to the native action.
     action = agent_output[0][0]
@@ -93,7 +94,6 @@ def build_actor(agent, env, level_name, action_set):
 
     output = ActorOutputFeedForward(
         level_name=level_name, 
-        level_id=game_id[level_name],
         env_outputs=full_env_outputs,
         agent_outputs=full_agent_outputs)
     # No backpropagation should be done here.

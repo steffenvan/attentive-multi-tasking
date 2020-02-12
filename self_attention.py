@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-
 def split_heads_2d(inputs, num_heads):
     s = inputs.shape[:-1]
     ret_shape = [-1, s[1], s[2], num_heads, inputs.shape[-1] // num_heads]

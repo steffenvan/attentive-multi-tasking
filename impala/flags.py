@@ -3,7 +3,7 @@ import tensorflow as tf
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
 
-flags.DEFINE_string('logdir', '/tmp/agent', 'TensorFlow log directory.')
+flags.DEFINE_string('logdir', '/tmp/impala_agent', 'TensorFlow log directory.')
 flags.DEFINE_enum('mode', 'train', ['train', 'test'], 'Training or test mode.')
 
 # Flags used for testing.
@@ -15,11 +15,7 @@ flags.DEFINE_enum('job_name', 'learner', ['learner', 'actor'],
                   'Job name. Ignored when task is set to -1.')
 
 # Agent
-flags.DEFINE_string('agent_name', 'ImpalaSubnet', 'Which learner to use')
-flags.DEFINE_integer('use_separate_attn_net', 0, 'Which subnetwork agent to use.')
-flags.DEFINE_integer('use_gap', 0, 'Global average pooling or fully connected layer for attention weights in the subnetworks.')
-flags.DEFINE_integer('subnets', 1, 'How many subnetworks to use.')
-
+flags.DEFINE_string('agent_name', 'impalafeedforward', 'Which learner to use')
 
 # Atari environments
 flags.DEFINE_integer('width', 84, 'Width of observation')

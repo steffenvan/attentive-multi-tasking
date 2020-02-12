@@ -20,7 +20,8 @@ from __future__ import print_function
 
 import collections
 import os.path
-from atari_wrappers import wrap_deepmind, make_atari
+import sys
+from .atari_wrappers import wrap_deepmind, make_atari
 
 import numpy as np
 import tensorflow as tf

@@ -8,35 +8,39 @@ import contextlib
 import functools
 import os
 import sys
+# sys.path.append('../')
 #from more_itertools import one 
-import atari_utils
-import atari_environment
+# from utils import *
+from utils import atari_utils
+from utils import atari_environment
+from utils import py_process
+from utils.test import test
+from impala.agent import agent_factory
+
 import numpy as np
-from agent import agent_factory
-sys.path.insert(0,'..')
-import py_process
 import tensorflow as tf
 try:
-  import dynamic_batching
+  import utils.dynamic_batching
 except tf.errors.NotFoundError:
   tf.logging.warning('Running without dynamic batching.')
 
 from six.moves import range
 
-from flags import *
-from build_learner import build_learner
-from build_actor import build_actor
+from impala import flags
+
+from impala.build_learner import build_learner 
+from impala.build_actor import build_actor
 
 nest = tf.contrib.framework.nest
 
 def is_single_machine():
-    return FLAGS.task == -1
+    return flags.FLAGS.task == -1
 
 def create_atari_environment(env_id, seed, is_test=False):
 
   config = {
-      'width': FLAGS.width,
-      'height': FLAGS.height
+      'width': flags.FLAGS.width,
+      'height': flags.FLAGS.height
   }
 
   if is_test:
@@ -76,24 +80,24 @@ def train(action_set, level_names):
     server = tf.train.Server.create_local_server()
     filters = []
   else:
-    local_job_device = '/job:%s/task:%d' % (FLAGS.job_name, FLAGS.task)
+    local_job_device = '/job:%s/task:%d' % (flags.FLAGS.job_name, flags.FLAGS.task)
     shared_job_device = '/job:learner/task:0'
-    is_actor_fn = lambda i: FLAGS.job_name == 'actor' and i == FLAGS.task
-    is_learner = FLAGS.job_name == 'learner'
+    is_actor_fn = lambda i: flags.FLAGS.job_name == 'actor' and i == flags.FLAGS.task
+    is_learner = flags.FLAGS.job_name == 'learner'
 
     # Placing the variable on CPU, makes it cheaper to send it to all the
     # actors. Continual copying the variables from the GPU is slow.
     global_variable_device = shared_job_device + '/cpu'
     cluster = tf.train.ClusterSpec({
-        'actor': ['localhost:%d' % (8001 + i) for i in range(FLAGS.num_actors)],
+        'actor': ['localhost:%d' % (8001 + i) for i in range(flags.FLAGS.num_actors)],
         'learner': ['localhost:8000']
     })
-    server = tf.train.Server(cluster, job_name=FLAGS.job_name,
-                             task_index=FLAGS.task)
+    server = tf.train.Server(cluster, job_name=flags.FLAGS.job_name,
+                             task_index=flags.FLAGS.task)
     filters = [shared_job_device, local_job_device]
 
   # Only used to find the actor output structure.
-  Agent = agent_factory(FLAGS.agent_name)
+  Agent = agent_factory(flags.FLAGS.agent_name)
   with tf.Graph().as_default():
     specific_atari_game = level_names[0]
     env = create_atari_environment(specific_atari_game, seed=1)
@@ -106,7 +110,7 @@ def train(action_set, level_names):
   with tf.Graph().as_default(), \
        tf.device(local_job_device + '/cpu'), \
        pin_global_variables(global_variable_device):
-    tf.set_random_seed(FLAGS.seed)  # Makes initialization deterministic.
+    tf.set_random_seed(flags.FLAGS.seed)  # Makes initialization deterministic.
 
     # Create Queue and Agent on the learner.
     with tf.device(shared_job_device):
@@ -130,7 +134,7 @@ def train(action_set, level_names):
 
     # Build actors and ops to enqueue their output.
     enqueue_ops = []
-    for i in range(FLAGS.num_actors):
+    for i in range(flags.FLAGS.num_actors):
       if is_actor_fn(i):
         level_name = level_names[i % len(level_names)]
         tf.logging.info('Creating actor %d with level %s', i, level_name)
@@ -157,7 +161,7 @@ def train(action_set, level_names):
           collections=[tf.GraphKeys.GLOBAL_STEP, tf.GraphKeys.GLOBAL_VARIABLES])
 
       # Create batch (time major) and recreate structure.
-      dequeued = queue.dequeue_many(FLAGS.batch_size)
+      dequeued = queue.dequeue_many(flags.FLAGS.batch_size)
       dequeued = nest.pack_sequence_as(structure, dequeued)
 
       def make_time_major(s):
@@ -182,14 +186,12 @@ def train(action_set, level_names):
         data_from_actors = nest.pack_sequence_as(structure, area.get())
 
         # levels_index = tf.map_fn(lambda y: tf.py_function(lambda x: game_id[x.numpy()], [y], Tout=tf.int32), data_from_actors.level_name, dtype=tf.int32, parallel_iterations=56)
-        # levels_index = tf.reshape(levels_index, [FLAGS.batch_size])
-        levels_index = data_from_actors.level_id
+        # levels_index = tf.reshape(levels_index, [flags.FLAGS.batch_size])
         # Unroll agent on sequence, create losses and update ops.
         output = build_learner(agent,
                                data_from_actors.env_outputs,
                                data_from_actors.agent_outputs,
-                               global_step=global_step,
-                               levels_index=levels_index)
+                               global_step=global_step)
         
     # Create MonitoredSession (to run the graph, checkpoint and log).
     tf.logging.info('Creating MonitoredSession, is_chief %s', is_learner)
@@ -197,7 +199,7 @@ def train(action_set, level_names):
     config = tf.ConfigProto(allow_soft_placement=True, device_filters=filters, gpu_options=gpu_options) 
     # config.gpu_options.allow_growth = True
     # config.gpu_options.per_process_gpu_memory_fraction = 0.8
-    logdir = FLAGS.logdir
+    logdir = flags.FLAGS.logdir
     with tf.train.MonitoredTrainingSession(
         server.target,
         is_chief=is_learner,
@@ -211,7 +213,7 @@ def train(action_set, level_names):
       if is_learner:
         # Logging.
         level_returns = {level_name: [] for level_name in level_names}
-        summary_dir = os.path.join(FLAGS.logdir, "logging")
+        summary_dir = os.path.join(flags.FLAGS.logdir, "logging")
         summary_writer = tf.summary.FileWriterCache.get(summary_dir)
         # Prepare data for first run.
         session.run_step_fn(
@@ -226,7 +228,7 @@ def train(action_set, level_names):
         #   print(elem)
         # print("Params: ", [v.get_shape().as_list() for v in tf.trainable_variables()])
         
-        while num_env_frames_v < FLAGS.total_environment_frames:
+        while num_env_frames_v < flags.FLAGS.total_environment_frames:
           level_names_v, done_v, infos_v, num_env_frames_v, _ = session.run(
               (data_from_actors.level_name,) + output + (stage_op,))
 
@@ -238,7 +240,7 @@ def train(action_set, level_names):
               infos_v.acc_episode_reward[done_v],
               infos_v.acc_episode_step[done_v]):
 
-            episode_frames = episode_step * FLAGS.num_action_repeats
+            episode_frames = episode_step * flags.FLAGS.num_action_repeats
             tf.logging.info('Level: %s Episode return: %f Acc return %f after %d frames',
                             level_name, episode_return, acc_episode_reward, num_env_frames_v)
             
@@ -256,7 +258,7 @@ def train(action_set, level_names):
             level_returns[level_name].append(episode_return)
 
           current_episode_return_list = min(map(len, level_returns.values())) 
-          if FLAGS.multi_task == 1 and current_episode_return_list >= 1:
+          if flags.FLAGS.multi_task == 1 and current_episode_return_list >= 1:
             def sum_none(list_):
               if list_:
                 return sum(list_)
@@ -285,15 +287,15 @@ def train(action_set, level_names):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     action_set = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ,15 ,16, 17] 
-    if FLAGS.multi_task == 1 and FLAGS.mode == 'train':
+    if flags.FLAGS.multi_task == 1 and flags.FLAGS.mode == 'train':
       level_names = atari_utils.ATARI_GAMES.keys()
-    elif FLAGS.multi_task == 1 and FLAGS.mode == 'test':
+    elif flags.FLAGS.multi_task == 1 and flags.FLAGS.mode == 'test':
       level_names = atari_utils.ATARI_GAMES.values()
     else:
-      level_names = [FLAGS.level_name]
-      action_set = atari_environment.get_action_set(FLAGS.level_name)
+      level_names = [flags.FLAGS.level_name]
+      action_set = atari_environment.get_action_set(flags.FLAGS.level_name)
 
-    if FLAGS.mode == 'train':
+    if flags.FLAGS.mode == 'train':
       train(action_set, level_names)
     else:
       test(action_set, level_names)

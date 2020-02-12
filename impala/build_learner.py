@@ -1,10 +1,10 @@
 import tensorflow as tf
 import sys
-sys.path.insert(0,'..')
+sys.path.append('../')
 import vtrace_orig as vtrace
 nest = tf.contrib.framework.nest
 
-from flags import *
+from .flags import *
 
 def compute_baseline_loss(advantages):
   # Loss for the baseline, summed over the time dimension.
@@ -25,7 +25,7 @@ def compute_policy_gradient_loss(logits, actions, advantages):
   policy_gradient_loss_per_timestep = cross_entropy * advantages
   return tf.reduce_sum(policy_gradient_loss_per_timestep)
 
-def build_learner(agent, env_outputs, agent_outputs, global_step, levels_index):
+def build_learner(agent, env_outputs, agent_outputs, global_step):
   """Builds the learner loop.
 
   Args:
@@ -37,14 +37,13 @@ def build_learner(agent, env_outputs, agent_outputs, global_step, levels_index):
     agent_outputs: An `AgentOutput` namedtuple where each field is of shape
       [T+1, ...].
     global_step: The current time step T. 
-    levels_index: The current level names aspython integers for the current batch. 
 
   Returns:
     A tuple of (done, infos, and environment frames) where
     the environment frames tensor causes an update.
   """
 
-  learner_outputs = agent.unroll(agent_outputs.action, env_outputs, levels_index)
+  learner_outputs = agent.unroll(agent_outputs.action, env_outputs)
 
   # Use last baseline value (from the value function) to bootstrap.
   bootstrap_value = learner_outputs.baseline[-1]
