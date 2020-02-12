@@ -10,8 +10,8 @@ import contextlib
 import functools
 import os
 import sys
-import utilities_atari
-import dmlab30_utilities
+import atari_utils
+sys.path.insert(0,'..')
 import self_attention
 FLAGS = tf.app.flags.FLAGS
 
@@ -28,7 +28,7 @@ class ImpalaSubnet(snt.AbstractModule):
     super(ImpalaSubnet, self).__init__(name='subnet_agent')
 
     self._num_actions = num_actions
-    self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
+    self._number_of_games = len(atari_utils.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
     self.use_gap = FLAGS.use_gap
     self.use_separate_attn_net = FLAGS.use_separate_attn_net
@@ -149,7 +149,7 @@ class SelfAttentionSubnet(snt.AbstractModule):
     super(SelfAttentionSubnet, self).__init__(name='self_attention_subnet')
 
     self._num_actions = num_actions
-    self._number_of_games = len(utilities_atari.ATARI_GAMES.keys())
+    self._number_of_games = len(atari_utils.ATARI_GAMES.keys())
     self.sub_networks = FLAGS.subnets
     self.use_gap = FLAGS.use_gap
 
